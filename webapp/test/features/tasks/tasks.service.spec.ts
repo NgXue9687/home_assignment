@@ -27,6 +27,7 @@ describe('TasksService.assignDeveloper', () => {
   const manager = {
     findOne: vi.fn(),
     delete: vi.fn(),
+    update: vi.fn(),
     create: vi.fn((_entity: unknown, values: unknown) => values),
     save: vi.fn(),
   };
@@ -109,6 +110,32 @@ describe('TasksService.assignDeveloper', () => {
       }),
     );
     expect(manager.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes the assignee when developerUuid is null', async () => {
+    manager.findOne.mockResolvedValueOnce(backendTask);
+
+    await tasksService.assignDeveloper('task-uuid', null, 'Bob');
+
+    expect(manager.delete).toHaveBeenCalledWith(TaskMapperEntity, {
+      taskId: '10',
+    });
+    expect(manager.update).toHaveBeenCalledWith(
+      TaskEntity,
+      { taskId: '10' },
+      { modifiedBy: 'Bob' },
+    );
+    expect(manager.findOne).toHaveBeenCalledTimes(1);
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundException and removes nothing when the task does not exist', async () => {
+    manager.findOne.mockResolvedValueOnce(null);
+
+    await expect(
+      tasksService.assignDeveloper('missing-uuid', null, 'Bob'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(manager.delete).not.toHaveBeenCalled();
   });
 
   it('throws NotFoundException when the developer does not exist', async () => {
@@ -194,6 +221,7 @@ describe('TasksService subtasks', () => {
       taskSkillMappers: [],
       taskMappers: [],
       parentTask: null,
+      parentTaskId: null,
       ...overrides,
     });
   }
@@ -228,7 +256,7 @@ describe('TasksService subtasks', () => {
     tasksRepository.find.mockResolvedValue([{ status: 'D' }, { status: 'T' }]);
 
     await expect(
-      tasksService.update('task-uuid', { status: 'D' }, 'Bob'),
+      tasksService.changeStatus('task-uuid', 'D', 'Bob'),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
     expect(tasksRepository.save).not.toHaveBeenCalled();
   });
@@ -236,15 +264,32 @@ describe('TasksService subtasks', () => {
   it('marks a task Done when all its subtasks are Done', async () => {
     tasksRepository.find.mockResolvedValue([{ status: 'D' }, { status: 'D' }]);
 
-    await tasksService.update('task-uuid', { status: 'D' }, 'Bob');
+    await tasksService.changeStatus('task-uuid', 'D', 'Bob');
 
     expect(tasksRepository.save).toHaveBeenCalledTimes(1);
   });
 
-  it('does not check subtasks when the status is not changed to Done', async () => {
+  it('saves a title change without looking at subtasks or the parent', async () => {
     await tasksService.update('task-uuid', { taskTitle: 'New title' }, 'Bob');
 
     expect(tasksRepository.find).not.toHaveBeenCalled();
+    expect(tasksRepository.findOne).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not check subtasks when the status is changed to In Progress', async () => {
+    await tasksService.changeStatus('task-uuid', 'P', 'Bob');
+
+    expect(tasksRepository.find).not.toHaveBeenCalled();
+  });
+
+  it('records who changed the status', async () => {
+    tasksRepository.find.mockResolvedValue([]);
+
+    await tasksService.changeStatus('task-uuid', 'D', 'Bob');
+
+    expect(tasksRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'D', modifiedBy: 'Bob' }),
+    );
   });
 
   it('refuses to delete a task that still has subtasks', async () => {
@@ -314,7 +359,7 @@ describe('TasksService subtasks', () => {
       .mockResolvedValueOnce({ status: 'D' });
 
     await expect(
-      tasksService.update('task-uuid', { status: 'P' }, 'Bob'),
+      tasksService.changeStatus('task-uuid', 'P', 'Bob'),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
     expect(tasksRepository.save).not.toHaveBeenCalled();
   });
@@ -325,7 +370,7 @@ describe('TasksService subtasks', () => {
       .mockResolvedValueOnce({ status: 'P' })
       .mockResolvedValue(aTask());
 
-    await tasksService.update('task-uuid', { status: 'P' }, 'Bob');
+    await tasksService.changeStatus('task-uuid', 'P', 'Bob');
 
     expect(tasksRepository.save).toHaveBeenCalledTimes(1);
   });
@@ -333,7 +378,7 @@ describe('TasksService subtasks', () => {
   it('does not look up a parent for a task that has none', async () => {
     tasksRepository.findOne.mockResolvedValue(aTask({ parentTaskId: null }));
 
-    await tasksService.update('task-uuid', { status: 'P' }, 'Bob');
+    await tasksService.changeStatus('task-uuid', 'P', 'Bob');
 
     expect(tasksRepository.findOne).toHaveBeenCalledTimes(2);
   });

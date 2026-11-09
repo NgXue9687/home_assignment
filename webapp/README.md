@@ -27,19 +27,31 @@
 
 ## Skill identification using an LLM (Part 5)
 
-When a task or subtask is created **without** `skillUuids`, the backend asks an LLM (Google Gemini) which skills it needs, based on its title, and saves them. Nothing has to be triggered from the frontend.
+When a task or subtask is created **without** `skillUuids`, the backend asks an LLM which skills it needs, based on its title, and saves them. Nothing has to be triggered from the frontend.
 
 ### Setup
 
-Add a Gemini API key to `.env` (free key at https://aistudio.google.com/apikey):
+The LLM provider is chosen in `.env`. Gemini is the default:
 
 ```
-GEMINI_API_KEY=your-key
-GEMINI_MODEL=gemini-3.5-flash-lite   # optional
-LLM_TIMEOUT_MS=5000                  # optional
+LLM_PROVIDER=gemini
+LLM_API_KEY=your-key          # free key at https://aistudio.google.com/apikey
+LLM_MODEL=                    # optional, defaults to gemini-3.5-flash-lite
+LLM_TIMEOUT_MS=5000           # optional
 ```
 
-Without a key the app still starts. It logs a warning and creates tasks without identified skills.
+Any provider that speaks the OpenAI Chat Completions API works too: OpenAI, Groq, OpenRouter, Mistral, Cerebras, or a local Ollama.
+
+| Provider | `LLM_PROVIDER` | `LLM_BASE_URL` | `LLM_MODEL` (example) | Key |
+|---|---|---|---|---|
+| Gemini (default) | `gemini` | | `gemini-3.5-flash-lite` | Required |
+| Groq | `openai-compatible` | `https://api.groq.com/openai/v1` | `openai/gpt-oss-120b` | Required |
+| OpenAI | `openai-compatible` | `https://api.openai.com/v1` | `gpt-5-mini` | Required |
+| Ollama (local, no account) | `openai-compatible` | `http://localhost:11434/v1` | `qwen3:8b` | Not needed |
+
+For `openai-compatible`, pick a model that supports structured outputs (`response_format` with `json_schema`).
+
+If the chosen provider isn't fully configured, or `LLM_PROVIDER=none`, the app still starts. It logs why skill identification is off and creates tasks without identified skills. An unknown `LLM_PROVIDER` value stops the app at startup.
 
 ### How it works
 
@@ -48,7 +60,7 @@ POST /tasks ─► TasksService.create
                  ├─ SkillIdentificationService.identifyForTaskTree(dto)
                  │    ├─ collect the task + subtasks sent without skillUuids
                  │    ├─ load active skills from the skills table
-                 │    ├─ one Gemini call for all those titles (JSON schema output)
+                 │    ├─ one LLM call for all those titles (JSON schema output)
                  │    └─ keep only skill names that exist in the table
                  └─ transaction: save tasks + taskskillsmapper rows
 ```
@@ -56,30 +68,34 @@ POST /tasks ─► TasksService.create
 | File | Role |
 |---|---|
 | `src/features/skillIdentification/skillIdentification.service.ts` | Decides which tasks need skills, calls the LLM, checks the answer |
-| `src/features/skillIdentification/llm/llmClient.ts` | Provider-neutral `LlmClient` interface |
-| `src/features/skillIdentification/llm/geminiClient.ts` | Gemini REST implementation: timeout and one retry on 429/5xx |
+| `src/features/skillIdentification/llm/llmClient.ts` | Provider-neutral `LlmClient` interface and JSON Schema type |
+| `src/features/skillIdentification/llm/llmClientFactory.ts` | Picks the client from the `LLM_*` settings |
+| `src/features/skillIdentification/llm/geminiClient.ts` | Gemini REST API |
+| `src/features/skillIdentification/llm/openAiCompatibleClient.ts` | OpenAI Chat Completions API (OpenAI, Groq, Ollama…) |
+| `src/features/skillIdentification/llm/llmHttp.ts` | Shared HTTP: timeout on every attempt, one retry on 429/5xx |
 | `src/shared/utils/skillIdentification.prompt.ts` | Prompt, response schema, and reading the answer (pure functions) |
 
 ### Design decisions
 
+- **The provider is configuration, not code.** The service depends only on the `LlmClient` interface. The response schema is written once as standard JSON Schema, and each client converts it to its provider's format. Adding another kind of provider means writing one class.
 - **Skills come from the database, not the code.** The prompt lists the active skills with their descriptions, and the response schema limits the answer to those names (`enum`). Adding a skill row makes it available to the LLM with no code change.
 - **The LLM's answer is never trusted as-is.** Names are matched against the skills table (ignoring case), and anything unknown, malformed or for a task that wasn't asked about is dropped. The schema and this check also limit what a prompt-injection attempt in a task title could achieve: at most, a wrong choice among real skills.
 - **One LLM call per request.** A task and all its subtasks are classified in a single call, which keeps latency low and stays inside free-tier rate limits.
-- **Creating a task never fails because of the LLM.** If Gemini is down, slow (timeout), rate limited after one retry, or returns nothing usable, the task is still created, just without identified skills, and a warning is logged.
+- **Creating a task never fails because of the LLM.** If the provider is down, slow (timeout), rate limited after one retry, or returns nothing usable, the task is still created, just without identified skills, and a warning is logged.
 - **The LLM is called before the database transaction**, so no transaction is held open while waiting on a network call.
 - **Audit trail.** Skills the LLM identified are saved with `createdby = 'System'`, so they can be told apart from skills a user chose.
 - **Deterministic.** `temperature: 0`, plus the three examples from the requirements as few-shot examples in the prompt.
-- **Provider-neutral.** Switching to another LLM means writing one class that implements `LlmClient`.
 
 ### Limitations and next steps
 
 - Identification runs only at creation. Editing a task's title does not re-identify its skills.
 - Creating a task waits for the LLM (bounded by `LLM_TIMEOUT_MS`). At higher volume this could move to a background job (for example `@nestjs/bullmq`) that fills in skills after the task is saved.
+- There is no automatic failover between providers. A second provider could be tried when the first fails.
 - Accuracy could be tracked with a small labelled set of task titles run against the prompt whenever it changes.
 
 ### Tests
 
-`npm test` covers the service (subtasks, unknown names, malformed answers, LLM failure, no key), the Gemini client (request format, retry, no retry on 400, empty answer) and task creation (identified skills saved as `System`, user-chosen skills kept). The LLM is mocked in all of them, so no API key is needed.
+`npm test` covers the service (subtasks, unknown names, malformed answers, LLM failure, LLM off), both clients (request format, retry, no retry on 400, empty answer, no key for Ollama), provider selection, and task creation (identified skills saved as `System`, user-chosen skills kept). The LLM is mocked in all of them, so no API key is needed.
 
 ## Project setup
 

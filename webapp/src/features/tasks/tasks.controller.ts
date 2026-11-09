@@ -21,6 +21,7 @@ import { AssignDeveloperDto } from '../../models/dto/assignDeveloper.dto.js';
 import { TaskResponseDto } from '../../models/dto/response/taskResponse.dto.js';
 import { ListTasksQueryDto } from '../../models/dto/query/listTasksQuery.dto.js';
 import { PagedResponseDto } from '../../models/dto/response/pagedResponse.dto.js';
+import { UpdateTaskStatus } from '../../models/dto/updateTaskStatus.dto.js';
 
 @UseGuards(UserActionGuard)
 @Controller('tasks')
@@ -53,6 +54,19 @@ export class TasksController {
     @CurrentUser() currentUser: string,
   ): Promise<TaskResponseDto> {
     return this.tasksService.update(id, updateTaskDto, currentUser);
+  }
+
+  @Put(':id/status')
+  changeStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() UpdateTaskStatus: UpdateTaskStatus,
+    @CurrentUser() currentUser: string,
+  ): Promise<TaskResponseDto> {
+    return this.tasksService.changeStatus(
+      id,
+      UpdateTaskStatus.status,
+      currentUser,
+    );
   }
 
   @Put(':id/assignee')

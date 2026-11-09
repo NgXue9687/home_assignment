@@ -102,20 +102,33 @@ export class TasksService {
     currentUser: string,
   ): Promise<TaskResponseDto> {
     const task = await this.findEntity(uuid);
-    if (dto.status === TaskStatus.DONE) {
-      await this.assertSubtasksAreDone(task);
-    } else if (dto.status !== undefined) {
-      await this.assertParentIsNotDone(task);
-    }
     this.tasksRepository.merge(task, dto);
     task.modifiedBy = currentUser;
     await this.tasksRepository.save(task);
     return this.findOne(uuid);
   }
 
+  async changeStatus(
+    uuid: string,
+    status: TaskStatus,
+    currentUser: string,
+  ): Promise<TaskResponseDto> {
+    const task = await this.findEntity(uuid);
+    if (status === TaskStatus.DONE) {
+      await this.assertSubtasksAreDone(task);
+    } else {
+      await this.assertParentIsNotDone(task);
+    }
+    task.status = status;
+    task.modifiedBy = currentUser;
+    await this.tasksRepository.save(task);
+    return this.findOne(uuid);
+  }
+
+  // A null developerUuid removes the current assignee.
   async assignDeveloper(
     taskUuid: string,
-    developerUuid: string,
+    developerUuid: string | null,
     currentUser: string,
   ): Promise<TaskResponseDto> {
     await this.tasksRepository.manager.transaction(async (manager) => {
@@ -126,34 +139,11 @@ export class TasksService {
       if (!task)
         throw new NotFoundException(SysMessageFormat.taskNotFound(taskUuid));
 
-      const developer = await manager.findOne(DeveloperEntity, {
-        where: { uuid: developerUuid },
-        relations: { developerSkillMappers: true },
-      });
-      if (!developer)
-        throw new NotFoundException(
-          SysMessageFormat.developerNotFound(developerUuid),
-        );
-
-      const missingSkillIds = findMissingSkillIds(
-        task.taskSkillMappers.map((mapper) => mapper.skillId),
-        developer.developerSkillMappers.map((mapper) => mapper.skillId),
-      );
-      if (missingSkillIds.length > 0) {
-        throw new UnprocessableEntityException(
-          SysMessageFormat.developerLacksSkills(developer.name, taskUuid),
-        );
+      if (developerUuid === null) {
+        await this.removeAssignee(manager, task, currentUser);
+      } else {
+        await this.replaceAssignee(manager, task, developerUuid, currentUser);
       }
-
-      await manager.delete(TaskMapperEntity, { taskId: task.taskId });
-      await manager.save(
-        manager.create(TaskMapperEntity, {
-          taskId: task.taskId,
-          developerId: developer.developerId,
-          createdBy: currentUser,
-          modifiedBy: currentUser,
-        }),
-      );
     });
     return this.findOne(taskUuid);
   }
@@ -239,6 +229,55 @@ export class TasksService {
       );
     }
     return task;
+  }
+
+  private async removeAssignee(
+    manager: EntityManager,
+    task: TaskEntity,
+    currentUser: string,
+  ): Promise<void> {
+    await manager.delete(TaskMapperEntity, { taskId: task.taskId });
+    await manager.update(
+      TaskEntity,
+      { taskId: task.taskId },
+      { modifiedBy: currentUser },
+    );
+  }
+
+  private async replaceAssignee(
+    manager: EntityManager,
+    task: TaskEntity,
+    developerUuid: string,
+    currentUser: string,
+  ): Promise<void> {
+    const developer = await manager.findOne(DeveloperEntity, {
+      where: { uuid: developerUuid },
+      relations: { developerSkillMappers: true },
+    });
+    if (!developer)
+      throw new NotFoundException(
+        SysMessageFormat.developerNotFound(developerUuid),
+      );
+
+    const missingSkillIds = findMissingSkillIds(
+      task.taskSkillMappers.map((mapper) => mapper.skillId),
+      developer.developerSkillMappers.map((mapper) => mapper.skillId),
+    );
+    if (missingSkillIds.length > 0) {
+      throw new UnprocessableEntityException(
+        SysMessageFormat.developerLacksSkills(developer.name, task.uuid),
+      );
+    }
+
+    await manager.delete(TaskMapperEntity, { taskId: task.taskId });
+    await manager.save(
+      manager.create(TaskMapperEntity, {
+        taskId: task.taskId,
+        developerId: developer.developerId,
+        createdBy: currentUser,
+        modifiedBy: currentUser,
+      }),
+    );
   }
 
   private async assertSubtasksAreDone(task: TaskEntity): Promise<void> {
