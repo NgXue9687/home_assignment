@@ -156,10 +156,13 @@
       <div>
         <section>
           <h2>Smoke test</h2>
-          <p class="hint">Runs every check below in order against the API, using tasks titled "[smoke] ...". The tasks it creates are deleted at the end (soft delete), so rows stay in the table with a deleted date.</p>
+          <p class="hint">Runs every check below in order against the API, using tasks titled "[smoke] ...". It covers a three-level chain of subtasks and a check that two status changes sent at the same moment cannot break the Done rule. The tasks it creates are deleted again (soft delete), so rows stay in the table with a deleted date.</p>
           <div class="row">
             <label>Subtask depth limit in sysconfig
               <input id="depthLimit" class="small" type="number" min="1" value="3">
+            </label>
+            <label>Same-moment attempts
+              <input id="raceAttempts" class="small" type="number" min="1" max="50" value="8">
             </label>
             <button id="smokeButton" class="primary" type="button">Run smoke test</button>
           </div>
@@ -208,14 +211,24 @@
           </div>
           <label>Body for PATCH /tasks/:id
             <textarea id="updateBody" spellcheck="false" style="min-height:70px">{
-  "status": "P"
+  "taskTitle": "A new title"
 }</textarea>
           </label>
           <div class="row" style="margin-top:10px">
             <button type="button" data-action="updateTask"><span class="verb">PATCH</span> /tasks/:id</button>
           </div>
           <div class="row">
-            <label>Developer UUID for the assignment
+            <label>Status
+              <select id="statusField">
+                <option value="T">T - To-do</option>
+                <option value="P">P - In progress</option>
+                <option value="D">D - Done</option>
+              </select>
+            </label>
+            <button type="button" data-action="changeStatus"><span class="verb">PUT</span> /tasks/:id/status</button>
+          </div>
+          <div class="row">
+            <label>Developer UUID for the assignment (leave empty to remove the assignee)
               <input id="developerField" class="uuid-input" placeholder="click a developer UUID in the response" spellcheck="false">
             </label>
             <button type="button" data-action="assignDeveloper"><span class="verb">PUT</span> /tasks/:id/assignee</button>
@@ -414,9 +427,14 @@
         const id = requireField($('idField'), 'UUID');
         return id && send('PATCH', '/tasks/' + id, { rawBody: $('updateBody').value });
       },
+      changeStatus: () => {
+        const id = requireField($('idField'), 'UUID');
+        return id && send('PUT', '/tasks/' + id + '/status', { body: { status: $('statusField').value } });
+      },
       assignDeveloper: () => {
         const id = requireField($('idField'), 'UUID');
-        const developerUuid = $('developerField').value.trim();
+        // An empty field sends null, which removes the current assignee.
+        const developerUuid = $('developerField').value.trim() || null;
         if (!id) return null;
         return send('PUT', '/tasks/' + id + '/assignee', { body: { developerUuid } });
       },
@@ -492,6 +510,18 @@
       }
       return node;
     }
+
+    // One status change on a level of the A > B > C chain, with the answer it must give.
+    const chainStatusStep = (name, level, status, expected) => ({
+      name,
+      run: async (ctx) => {
+        if (!ctx.chain) return skip('the chain was not created');
+        return expectStatus(
+          await callApi('PUT', '/tasks/' + ctx.chain[level] + '/status', { body: { status } }),
+          expected,
+        );
+      },
+    });
 
     const smokeSteps = [
       {
@@ -572,7 +602,29 @@
         name: 'A task cannot be Done while a subtask is not Done',
         run: async (ctx) => {
           if (!ctx.parent) return skip('the task was not created');
-          return expectStatus(await callApi('PATCH', '/tasks/' + ctx.parent.uuid, { body: { status: 'D' } }), 422);
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.parent.uuid + '/status', { body: { status: 'D' } }), 422);
+        },
+      },
+      {
+        name: 'An unknown status is rejected',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.parent.uuid + '/status', { body: { status: 'X' } }), 400);
+        },
+      },
+      {
+        name: 'PATCH no longer accepts a status',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('PATCH', '/tasks/' + ctx.parent.uuid, { body: { status: 'D' } }), 400);
+        },
+      },
+      {
+        name: 'PATCH changes the title',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('PATCH', '/tasks/' + ctx.parent.uuid, { body: { taskTitle: '[smoke] parent renamed' } }), 200,
+            (data) => (data.taskTitle === '[smoke] parent renamed' ? '' : 'the title was not changed'));
         },
       },
       {
@@ -599,24 +651,193 @@
         },
       },
       {
+        name: 'The assignee can be removed with null',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.parent.uuid + '/assignee', { body: { developerUuid: null } }), 200,
+            (data) => (data.assignedDeveloper === null ? '' : 'the developer is still assigned'));
+        },
+      },
+      {
+        name: 'The developer can be assigned again',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          const developer = ctx.developers.find((d) => d.skills.some((s) => s.uuid === ctx.skill.uuid));
+          if (!developer) return skip('no developer has the skill "' + ctx.skill.skillName + '"');
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.parent.uuid + '/assignee', {
+            body: { developerUuid: developer.uuid },
+          }), 200, (data) => (data.assignedDeveloper ? '' : 'nobody is assigned'));
+        },
+      },
+      {
+        name: 'An empty string also removes the assignee',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.parent.uuid + '/assignee', { body: { developerUuid: '' } }), 200,
+            (data) => (data.assignedDeveloper === null ? '' : 'the developer is still assigned'));
+        },
+      },
+      {
+        name: 'A missing developerUuid is rejected',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.parent.uuid + '/assignee', { body: {} }), 400);
+        },
+      },
+      {
         name: 'A subtask can be set to Done',
         run: async (ctx) => {
           if (!ctx.child) return skip('the subtask was not found');
-          return expectStatus(await callApi('PATCH', '/tasks/' + ctx.child.uuid, { body: { status: 'D' } }), 200);
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.child.uuid + '/status', { body: { status: 'D' } }), 200,
+            (data) => (data.status === 'D' ? '' : 'the status was not saved'));
         },
       },
       {
         name: 'The task can be Done once every subtask is Done',
         run: async (ctx) => {
           if (!ctx.parent) return skip('the task was not created');
-          return expectStatus(await callApi('PATCH', '/tasks/' + ctx.parent.uuid, { body: { status: 'D' } }), 200);
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.parent.uuid + '/status', { body: { status: 'D' } }), 200);
         },
       },
       {
         name: 'A subtask cannot leave Done while its parent is Done',
         run: async (ctx) => {
           if (!ctx.child) return skip('the subtask was not found');
-          return expectStatus(await callApi('PATCH', '/tasks/' + ctx.child.uuid, { body: { status: 'T' } }), 422);
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.child.uuid + '/status', { body: { status: 'T' } }), 422);
+        },
+      },
+      {
+        name: 'Create a chain of three levels (A > B > C)',
+        run: async (ctx) => {
+          if (!ctx.skill) return skip('no skill was loaded');
+          const skillUuids = [ctx.skill.uuid];
+          const result = await callApi('POST', '/tasks', {
+            body: {
+              taskTitle: '[smoke] chain A',
+              skillUuids,
+              subtasks: [{
+                taskTitle: '[smoke] chain B',
+                skillUuids,
+                subtasks: [{ taskTitle: '[smoke] chain C', skillUuids }],
+              }],
+            },
+          });
+          ctx.chain = null;
+          if (result.status === 201) {
+            const list = await callApi('GET', '/tasks?page=1&pageSize=100');
+            const items = list.data && Array.isArray(list.data.items) ? list.data.items : [];
+            const a = items.find((task) => task.uuid === result.data.uuid);
+            const b = a && items.find((task) => task.parentUuid === a.uuid);
+            const c = b && items.find((task) => task.parentUuid === b.uuid);
+            if (a && b && c) ctx.chain = { a: a.uuid, b: b.uuid, c: c.uuid };
+          }
+          return expectStatus(result, 201, () => (ctx.chain ? '' : 'the three levels were not found in GET /tasks'));
+        },
+      },
+      chainStatusStep('A cannot be Done while B is not Done', 'a', 'D', 422),
+      chainStatusStep('B cannot be Done while C is not Done', 'b', 'D', 422),
+      chainStatusStep('C can be Done', 'c', 'D', 200),
+      chainStatusStep('A still cannot be Done while B is not Done', 'a', 'D', 422),
+      chainStatusStep('B can be Done once C is Done', 'b', 'D', 200),
+      chainStatusStep('A can be Done once B is Done', 'a', 'D', 200),
+      chainStatusStep('C cannot leave Done while B is Done', 'c', 'T', 422),
+      chainStatusStep('B cannot leave Done while A is Done', 'b', 'P', 422),
+      {
+        name: 'The chain can be reopened from the top down (A, then B, then C)',
+        run: async (ctx) => {
+          if (!ctx.chain) return skip('the chain was not created');
+          const statuses = [];
+          for (const [level, status] of [['a', 'P'], ['b', 'P'], ['c', 'T']]) {
+            const result = await callApi('PUT', '/tasks/' + ctx.chain[level] + '/status', { body: { status } });
+            statuses.push(result.status);
+          }
+          return statuses.every((code) => code === 200)
+            ? pass('PUT status -> ' + statuses.join(', '))
+            : fail('PUT status -> ' + statuses.join(', ') + ', expected 200 each');
+        },
+      },
+      {
+        name: 'The chain is deleted from the bottom up',
+        run: async (ctx) => {
+          if (!ctx.chain) return skip('the chain was not created');
+          const statuses = [];
+          for (const level of ['c', 'b', 'a']) {
+            statuses.push((await callApi('DELETE', '/tasks/' + ctx.chain[level])).status);
+          }
+          return statuses.every((code) => code === 204)
+            ? pass('DELETE C, B, A -> ' + statuses.join(', '))
+            : fail('DELETE C, B, A -> ' + statuses.join(', ') + ', expected 204 each');
+        },
+      },
+      {
+        name: 'A Done > Done > To-do tree is rejected and nothing is saved',
+        run: async (ctx) => {
+          if (!ctx.skill) return skip('no skill was loaded');
+          const skillUuids = [ctx.skill.uuid];
+          const before = await callApi('GET', '/tasks?page=1&pageSize=1');
+          const result = await callApi('POST', '/tasks', {
+            body: {
+              taskTitle: '[smoke] bad A',
+              status: 'D',
+              skillUuids,
+              subtasks: [{
+                taskTitle: '[smoke] bad B',
+                status: 'D',
+                skillUuids,
+                subtasks: [{ taskTitle: '[smoke] bad C', skillUuids }],
+              }],
+            },
+          });
+          const after = await callApi('GET', '/tasks?page=1&pageSize=1');
+          return expectStatus(result, 422, () => (before.data.total === after.data.total
+            ? '' : 'the number of tasks went from ' + before.data.total + ' to ' + after.data.total));
+        },
+      },
+      {
+        name: 'Two status changes at the same moment keep the Done rule',
+        run: async (ctx) => {
+          if (!ctx.skill) return skip('no skill was loaded');
+          const attempts = Number($('raceAttempts').value);
+          if (!Number.isInteger(attempts) || attempts < 1) return skip('enter a whole number of attempts above');
+          const skillUuids = [ctx.skill.uuid];
+          let broken = 0;
+          for (let attempt = 1; attempt <= attempts; attempt += 1) {
+            // A is In progress, B and C are Done. A -> Done and B -> To-do are sent together.
+            const title = '[smoke] race ' + attempt;
+            const created = await callApi('POST', '/tasks', {
+              body: {
+                taskTitle: title + ' A',
+                status: 'P',
+                skillUuids,
+                subtasks: [{
+                  taskTitle: title + ' B',
+                  status: 'D',
+                  skillUuids,
+                  subtasks: [{ taskTitle: title + ' C', status: 'D', skillUuids }],
+                }],
+              },
+            });
+            if (created.status !== 201) {
+              return fail('could not create the test tasks: ' + created.status + ' ' + serverMessage(created));
+            }
+            const items = (await callApi('GET', '/tasks?page=1&pageSize=100')).data.items;
+            const a = items.find((task) => task.uuid === created.data.uuid);
+            const b = items.find((task) => task.parentUuid === a.uuid);
+            const c = items.find((task) => task.parentUuid === b.uuid);
+            await Promise.all([
+              callApi('PUT', '/tasks/' + a.uuid + '/status', { body: { status: 'D' } }),
+              callApi('PUT', '/tasks/' + b.uuid + '/status', { body: { status: 'T' } }),
+            ]);
+            const after = (await callApi('GET', '/tasks?page=1&pageSize=100')).data.items;
+            const aNow = after.find((task) => task.uuid === a.uuid);
+            const bNow = after.find((task) => task.uuid === b.uuid);
+            if (aNow.status === 'D' && bNow.status !== 'D') broken += 1;
+            // Delete from the bottom up: a task that still has subtasks cannot be deleted.
+            for (const task of [c, b, a]) await callApi('DELETE', '/tasks/' + task.uuid);
+          }
+          return broken === 0
+            ? pass('all ' + attempts + ' attempts kept the rule')
+            : fail(broken + ' of ' + attempts + ' attempts ended with a Done task that has a subtask that is not Done');
         },
       },
       {

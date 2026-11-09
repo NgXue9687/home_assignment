@@ -26,4 +26,31 @@ JOIN hrms.skills skill on skill.skillname = v.skill;
 INSERT INTO hrms.sysconfig (createdby,modifiedby,sysconfigname,sysconfigvalue)
 VALUES ('System','System','MAX_SUBTASK_LIST_SIZE','3');
 
+-- Sample tasks (from the wireframe). Every task is a top-level task, so parenttaskid stays empty.
+-- The skills of each task are listed once, next to its title, so no taskid is hard-coded.
+WITH seed (title, skillnames) AS (
+  VALUES
+    ('As a visitor, I want to see a responsive homepage so that I can easily navigate on both desktop and mobile devices',
+      ARRAY['Frontend']),
+    ('As a system administrator, I want to audit logs of all data access and modifications so that I can ensure compliance with data protection and investigate security incidents',
+      ARRAY['Backend']),
+    ('As an officer, I want to upload my profile information and upload a profile picture so that my account details are accurate and personalised',
+      ARRAY['Frontend', 'Backend'])
+),
+new_tasks AS (
+  INSERT INTO hrms.tasks (uuid, createdby, modifiedby, tasktitle)
+  SELECT gen_random_uuid(), 'System', 'System', title FROM seed
+  RETURNING taskid, tasktitle
+)
+INSERT INTO hrms.taskskillsmapper (createdby, modifiedby, taskid, skillid)
+SELECT 'System', 'System', new_tasks.taskid, skill.skillid
+FROM new_tasks
+JOIN seed ON seed.title = new_tasks.tasktitle
+JOIN hrms.skills skill ON skill.skillname = ANY (seed.skillnames);
 
+-- The wireframe shows the first task already assigned to Alice, who has the Frontend skill.
+INSERT INTO hrms.tasksmapper (createdby, modifiedby, taskid, developerid)
+SELECT 'System', 'System', task.taskid, developer.developerid
+FROM hrms.tasks task
+JOIN hrms.developers developer ON developer.name = 'Alice'
+WHERE task.tasktitle LIKE 'As a visitor%';

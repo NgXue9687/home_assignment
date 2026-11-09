@@ -37,6 +37,9 @@ import {
   SysMessageFormat,
 } from '../../shared/constants/sysMessages.js';
 
+// Status changes run one at a time (see changeStatus), so this id is only ever used for that lock.
+const STATUS_CHANGE_LOCK_ID = 4201;
+
 const TASK_RELATIONS: FindOptionsRelations<TaskEntity> = {
   taskSkillMappers: { skill: true },
   taskMappers: { developer: true },
@@ -108,20 +111,31 @@ export class TasksService {
     return this.findOne(uuid);
   }
 
+  // Two status changes at the same moment could each pass the Done rule and then
+  // break it together (A -> Done while B -> To-do). The lock makes them take turns,
+  // and each one then reads the data the previous one saved.
   async changeStatus(
     uuid: string,
     status: TaskStatus,
     currentUser: string,
   ): Promise<TaskResponseDto> {
-    const task = await this.findEntity(uuid);
-    if (status === TaskStatus.DONE) {
-      await this.assertSubtasksAreDone(task);
-    } else {
-      await this.assertParentIsNotDone(task);
-    }
-    task.status = status;
-    task.modifiedBy = currentUser;
-    await this.tasksRepository.save(task);
+    await this.tasksRepository.manager.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock($1)', [
+        STATUS_CHANGE_LOCK_ID,
+      ]);
+      const task = await manager.findOne(TaskEntity, { where: { uuid } });
+      if (!task)
+        throw new NotFoundException(SysMessageFormat.taskNotFound(uuid));
+
+      if (status === TaskStatus.DONE) {
+        await this.assertSubtasksAreDone(manager, task);
+      } else {
+        await this.assertParentIsNotDone(manager, task);
+      }
+      task.status = status;
+      task.modifiedBy = currentUser;
+      await manager.save(task);
+    });
     return this.findOne(uuid);
   }
 
@@ -280,8 +294,11 @@ export class TasksService {
     );
   }
 
-  private async assertSubtasksAreDone(task: TaskEntity): Promise<void> {
-    const subtasks = await this.tasksRepository.find({
+  private async assertSubtasksAreDone(
+    manager: EntityManager,
+    task: TaskEntity,
+  ): Promise<void> {
+    const subtasks = await manager.find(TaskEntity, {
       where: { parentTaskId: task.taskId },
       select: { status: true },
     });
@@ -291,9 +308,12 @@ export class TasksService {
   }
 
   // A Done parent needs every subtask Done, so a subtask cannot leave Done under it.
-  private async assertParentIsNotDone(task: TaskEntity): Promise<void> {
+  private async assertParentIsNotDone(
+    manager: EntityManager,
+    task: TaskEntity,
+  ): Promise<void> {
     if (task.parentTaskId === null) return;
-    const parent = await this.tasksRepository.findOne({
+    const parent = await manager.findOne(TaskEntity, {
       where: { taskId: task.parentTaskId },
       select: { status: true },
     });
