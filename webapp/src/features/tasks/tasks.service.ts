@@ -1,0 +1,277 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { EntityManager, FindOptionsRelations, In, Repository } from 'typeorm';
+import { randomUUID } from 'node:crypto';
+import { TaskEntity } from '../../models/entity/task.entity.js';
+import { DeveloperEntity } from '../../models/entity/developer.entity.js';
+import { SkillEntity } from '../../models/entity/skill.entity.js';
+import { TaskMapperEntity } from '../../models/entity/taskMapper.entity.js';
+import { TaskSkillMapperEntity } from '../../models/entity/taskSkillMapper.entity.js';
+import { CreateTaskDto } from '../../models/dto/createTask.dto.js';
+import { UpdateTaskDto } from '../../models/dto/updateTask.dto.js';
+import {
+  TaskResponseDto,
+  toTaskResponse,
+} from '../../models/dto/response/taskResponse.dto.js';
+import { ListTasksQueryDto } from '../../models/dto/query/listTasksQuery.dto.js';
+import { PagedResponseDto } from '../../models/dto/response/pagedResponse.dto.js';
+import { TaskStatus } from '../../shared/constants/taskStatus.js';
+
+import { findMissingSkillIds } from '../../shared/utils/tasks.skills.matcher.js';
+import {
+  getSubtaskDepth,
+  hasUnfinishedSubtasks,
+} from '../../shared/utils/tasks.utils.js';
+import { SysConfigService } from '../sysconfig/sysconfig.service.js';
+import { SkillIdentificationService } from '../skillIdentification/skillIdentification.service.js';
+import { SYSTEM_USER } from '../../shared/constants/auditUser.js';
+import { SysConfigKey } from '../../shared/constants/sysConfig.js';
+import {
+  SysMessage,
+  SysMessageFormat,
+} from '../../shared/constants/sysMessages.js';
+
+const TASK_RELATIONS: FindOptionsRelations<TaskEntity> = {
+  taskSkillMappers: { skill: true },
+  taskMappers: { developer: true },
+  parentTask: true,
+};
+
+@Injectable()
+export class TasksService {
+  constructor(
+    @InjectRepository(TaskEntity)
+    private readonly tasksRepository: Repository<TaskEntity>,
+    private readonly sysConfigService: SysConfigService,
+    private readonly skillIdentificationService: SkillIdentificationService,
+  ) {}
+
+  async create(
+    dto: CreateTaskDto,
+    currentUser: string,
+  ): Promise<TaskResponseDto> {
+    const maxSubtaskList = await this.sysConfigService.getInt(
+      SysConfigKey.MAX_SUBTASK_LIST_SIZE,
+    );
+    if (getSubtaskDepth(dto) > maxSubtaskList) {
+      throw new BadRequestException(
+        SysMessageFormat.subtaskDepthExceeded(maxSubtaskList),
+      );
+    }
+    // Asked before the transaction starts, so no database transaction is held
+    // open while waiting for the LLM.
+    const identifiedSkills =
+      await this.skillIdentificationService.identifyForTaskTree(dto);
+    const savedTask = await this.tasksRepository.manager.transaction(
+      (manager) =>
+        this.createTaskTree(manager, dto, currentUser, null, identifiedSkills),
+    );
+    return this.findOne(savedTask.uuid);
+  }
+
+  async findAll(
+    query: ListTasksQueryDto,
+  ): Promise<PagedResponseDto<TaskResponseDto>> {
+    const [tasks, total] = await this.tasksRepository.findAndCount({
+      relations: TASK_RELATIONS,
+      order: { createdDate: 'DESC', taskId: 'DESC' },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    });
+    return {
+      items: tasks.map(toTaskResponse),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  }
+
+  async findOne(uuid: string): Promise<TaskResponseDto> {
+    return toTaskResponse(await this.findEntity(uuid, TASK_RELATIONS));
+  }
+
+  async update(
+    uuid: string,
+    dto: UpdateTaskDto,
+    currentUser: string,
+  ): Promise<TaskResponseDto> {
+    const task = await this.findEntity(uuid);
+    if (dto.status === TaskStatus.DONE) {
+      await this.assertSubtasksAreDone(task);
+    } else if (dto.status !== undefined) {
+      await this.assertParentIsNotDone(task);
+    }
+    this.tasksRepository.merge(task, dto);
+    task.modifiedBy = currentUser;
+    await this.tasksRepository.save(task);
+    return this.findOne(uuid);
+  }
+
+  async assignDeveloper(
+    taskUuid: string,
+    developerUuid: string,
+    currentUser: string,
+  ): Promise<TaskResponseDto> {
+    await this.tasksRepository.manager.transaction(async (manager) => {
+      const task = await manager.findOne(TaskEntity, {
+        where: { uuid: taskUuid },
+        relations: { taskSkillMappers: true },
+      });
+      if (!task)
+        throw new NotFoundException(SysMessageFormat.taskNotFound(taskUuid));
+
+      const developer = await manager.findOne(DeveloperEntity, {
+        where: { uuid: developerUuid },
+        relations: { developerSkillMappers: true },
+      });
+      if (!developer)
+        throw new NotFoundException(
+          SysMessageFormat.developerNotFound(developerUuid),
+        );
+
+      const missingSkillIds = findMissingSkillIds(
+        task.taskSkillMappers.map((mapper) => mapper.skillId),
+        developer.developerSkillMappers.map((mapper) => mapper.skillId),
+      );
+      if (missingSkillIds.length > 0) {
+        throw new UnprocessableEntityException(
+          SysMessageFormat.developerLacksSkills(developer.name, taskUuid),
+        );
+      }
+
+      await manager.delete(TaskMapperEntity, { taskId: task.taskId });
+      await manager.save(
+        manager.create(TaskMapperEntity, {
+          taskId: task.taskId,
+          developerId: developer.developerId,
+          createdBy: currentUser,
+          modifiedBy: currentUser,
+        }),
+      );
+    });
+    return this.findOne(taskUuid);
+  }
+
+  async remove(uuid: string, currentUser: string): Promise<void> {
+    const task = await this.findEntity(uuid);
+    const subtaskCount = await this.tasksRepository.count({
+      where: { parentTaskId: task.taskId },
+    });
+    if (subtaskCount > 0) {
+      throw new ConflictException(SysMessage.TASK_HAS_SUBTASKS);
+    }
+    await this.tasksRepository.manager.transaction(async (manager) => {
+      task.modifiedBy = currentUser;
+      await manager.save(task);
+      await manager.softRemove(task);
+    });
+  }
+
+  // Saves a task, its required skills, then its subtasks (which can have subtasks too).
+  // identifiedSkills holds the skills the LLM found for tasks sent without skillUuids.
+  private async createTaskTree(
+    manager: EntityManager,
+    dto: CreateTaskDto,
+    currentUser: string,
+    parentTaskId: string | null,
+    identifiedSkills: Map<CreateTaskDto, SkillEntity[]>,
+  ): Promise<TaskEntity> {
+    const subtaskDtos = dto.subtasks ?? [];
+    const status = dto.status ?? TaskStatus.TODO;
+    if (
+      status === TaskStatus.DONE &&
+      hasUnfinishedSubtasks(
+        subtaskDtos.map((subtask) => subtask.status ?? TaskStatus.TODO),
+      )
+    ) {
+      throw new UnprocessableEntityException(SysMessage.SUBTASKS_NOT_DONE);
+    }
+
+    const skillUuids = dto.skillUuids ?? [];
+    let skills: SkillEntity[];
+    let skillsAddedBy = currentUser;
+    if (skillUuids.length > 0) {
+      skills = await manager.findBy(SkillEntity, { uuid: In(skillUuids) });
+      if (skills.length !== skillUuids.length) {
+        throw new BadRequestException(SysMessage.SKILLS_NOT_FOUND);
+      }
+    } else {
+      // No skills given: use the ones the LLM identified, recorded as added by
+      // the system so they can be told apart from skills a user chose.
+      skills = identifiedSkills.get(dto) ?? [];
+      skillsAddedBy = SYSTEM_USER;
+    }
+
+    const task = await manager.save(
+      manager.create(TaskEntity, {
+        taskTitle: dto.taskTitle,
+        taskDescription: dto.taskDescription,
+        status: dto.status,
+        parentTaskId,
+        uuid: randomUUID(),
+        createdBy: currentUser,
+        modifiedBy: currentUser,
+      }),
+    );
+    await manager.save(
+      skills.map((skill) =>
+        manager.create(TaskSkillMapperEntity, {
+          taskId: task.taskId,
+          skillId: skill.skillId,
+          createdBy: skillsAddedBy,
+          modifiedBy: skillsAddedBy,
+        }),
+      ),
+    );
+    for (const subtaskDto of subtaskDtos) {
+      await this.createTaskTree(
+        manager,
+        subtaskDto,
+        currentUser,
+        task.taskId,
+        identifiedSkills,
+      );
+    }
+    return task;
+  }
+
+  private async assertSubtasksAreDone(task: TaskEntity): Promise<void> {
+    const subtasks = await this.tasksRepository.find({
+      where: { parentTaskId: task.taskId },
+      select: { status: true },
+    });
+    if (hasUnfinishedSubtasks(subtasks.map((subtask) => subtask.status))) {
+      throw new UnprocessableEntityException(SysMessage.SUBTASKS_NOT_DONE);
+    }
+  }
+
+  // A Done parent needs every subtask Done, so a subtask cannot leave Done under it.
+  private async assertParentIsNotDone(task: TaskEntity): Promise<void> {
+    if (task.parentTaskId === null) return;
+    const parent = await this.tasksRepository.findOne({
+      where: { taskId: task.parentTaskId },
+      select: { status: true },
+    });
+    if (parent?.status === TaskStatus.DONE) {
+      throw new UnprocessableEntityException(SysMessage.PARENT_TASK_DONE);
+    }
+  }
+
+  private async findEntity(
+    uuid: string,
+    relations?: FindOptionsRelations<TaskEntity>,
+  ): Promise<TaskEntity> {
+    const task = await this.tasksRepository.findOne({
+      where: { uuid },
+      relations,
+    });
+    if (!task) throw new NotFoundException(SysMessageFormat.taskNotFound(uuid));
+    return task;
+  }
+}

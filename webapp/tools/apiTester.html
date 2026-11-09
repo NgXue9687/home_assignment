@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HRMS API Tester</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #1b1f24;
+      --muted: #5b6470;
+      --line: #d9dde3;
+      --accent: #1f5fbf;
+      --accent-text: #ffffff;
+      --ok: #167a3e;
+      --warn: #a15c00;
+      --bad: #b3261e;
+      --code-bg: #f0f2f5;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14171b;
+        --panel: #1d2127;
+        --text: #e8eaed;
+        --muted: #9aa3ad;
+        --line: #343a42;
+        --accent: #6ea2f5;
+        --accent-text: #0d1117;
+        --ok: #5fcf88;
+        --warn: #f0b252;
+        --bad: #ff8a80;
+        --code-bg: #12151a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    header, main { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+    header { padding-top: 20px; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    h2 { margin: 0 0 10px; font-size: 16px; }
+    p.hint { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+    section, .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
+    .row:last-child { margin-bottom: 0; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+    input, select, textarea, button { font: inherit; }
+    input, select, textarea {
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 9px;
+    }
+    input.wide { width: 340px; max-width: 100%; }
+    input.uuid-input { width: 330px; max-width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+    input.small { width: 80px; }
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+    button {
+      cursor: pointer;
+      color: var(--text);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 12px;
+    }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+    button:disabled { opacity: .55; cursor: default; }
+    .verb { display: inline-block; min-width: 48px; font-weight: 700; font-size: 12px; text-align: left; }
+    .columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+    @media (max-width: 860px) { .columns { grid-template-columns: 1fr; } }
+    .sticky { position: sticky; top: 12px; }
+    .badge { display: inline-block; padding: 2px 9px; border-radius: 99px; font-weight: 700; font-size: 13px; border: 1px solid currentColor; }
+    .badge.ok { color: var(--ok); }
+    .badge.warn { color: var(--warn); }
+    .badge.bad { color: var(--bad); }
+    pre {
+      margin: 10px 0 0;
+      padding: 10px;
+      background: var(--code-bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: auto;
+      max-height: 480px;
+      font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    pre button.uuid {
+      padding: 0 3px;
+      font: inherit;
+      color: var(--accent);
+      background: none;
+      border: 0;
+      border-bottom: 1px dashed var(--accent);
+      border-radius: 0;
+    }
+    ol.checks { list-style: none; margin: 10px 0 0; padding: 0; }
+    ol.checks li { padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+    ol.checks li:last-child { border-bottom: 0; }
+    ol.checks .detail { display: block; margin-left: 24px; color: var(--muted); font-size: 12.5px; }
+    .pass { color: var(--ok); }
+    .fail { color: var(--bad); }
+    .skip { color: var(--warn); }
+    .history { margin: 0; padding: 0; list-style: none; font-size: 13px; }
+    .history li { padding: 3px 0; cursor: pointer; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .history li:hover { color: var(--accent); }
+    details { margin-top: 8px; font-size: 13px; color: var(--muted); }
+    code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+    .message { margin-top: 8px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>HRMS API Tester</h1>
+    <p class="hint">A plain static page for trying the NestJS API by hand. It sends the <code>x-acting-user</code> header on every call. Nothing here is stored on a server.</p>
+  </header>
+
+  <main>
+    <section>
+      <div class="row">
+        <label>API base URL
+          <input id="baseUrl" class="wide" value="http://localhost:3000" spellcheck="false">
+        </label>
+        <label>x-acting-user (max 20 characters)
+          <input id="actingUser" maxlength="20" value="tester" spellcheck="false">
+        </label>
+        <button id="pingButton" type="button">Check connection</button>
+        <span id="pingResult" class="message"></span>
+      </div>
+      <details>
+        <summary>The page cannot reach the API?</summary>
+        <p>The easiest way is to open this page from the API itself, for example <code>http://localhost:3000/apiTester.html</code>. The page and the API then share one address, so no CORS setup is needed.</p>
+        <p>A page opened from a file or from another port is a different origin, so the browser only lets it read the API's answer if the API sends CORS headers. In that case add <code>app.enableCors();</code> in <code>webapp/src/main.ts</code> before <code>app.listen</code> and restart the API.</p>
+      </details>
+    </section>
+
+    <div class="columns">
+      <div>
+        <section>
+          <h2>Smoke test</h2>
+          <p class="hint">Runs every check below in order against the API, using tasks titled "[smoke] ...". The tasks it creates are deleted at the end (soft delete), so rows stay in the table with a deleted date.</p>
+          <div class="row">
+            <label>Subtask depth limit in sysconfig
+              <input id="depthLimit" class="small" type="number" min="1" value="3">
+            </label>
+            <button id="smokeButton" class="primary" type="button">Run smoke test</button>
+          </div>
+          <div id="smokeSummary" class="message"></div>
+          <ol id="smokeChecks" class="checks"></ol>
+        </section>
+
+        <section>
+          <h2>Skills and developers</h2>
+          <div class="row">
+            <button type="button" data-action="listSkills"><span class="verb">GET</span> /skills</button>
+            <button type="button" data-action="listDevelopers"><span class="verb">GET</span> /developers</button>
+          </div>
+          <div class="row">
+            <label>UUID for the calls that need an id
+              <input id="idField" class="uuid-input" placeholder="click a UUID in the response" spellcheck="false">
+            </label>
+          </div>
+          <div class="row">
+            <button type="button" data-action="getSkill"><span class="verb">GET</span> /skills/:id</button>
+            <button type="button" data-action="getDeveloper"><span class="verb">GET</span> /developers/:id</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Tasks</h2>
+          <div class="row">
+            <label>page <input id="pageField" class="small" type="number" min="1" value="1"></label>
+            <label>pageSize <input id="pageSizeField" class="small" type="number" min="1" max="100" value="50"></label>
+            <button type="button" data-action="listTasks"><span class="verb">GET</span> /tasks</button>
+            <button type="button" data-action="getTask"><span class="verb">GET</span> /tasks/:id</button>
+            <button type="button" data-action="deleteTask"><span class="verb">DELETE</span> /tasks/:id</button>
+          </div>
+          <label>Body for POST /tasks
+            <textarea id="createBody" spellcheck="false">{
+  "taskTitle": "Write the API docs",
+  "taskDescription": "Created from the API tester",
+  "skillUuids": [],
+  "subtasks": [
+    { "taskTitle": "Draft the outline" }
+  ]
+}</textarea>
+          </label>
+          <div class="row" style="margin-top:10px">
+            <button type="button" data-action="createTask"><span class="verb">POST</span> /tasks</button>
+          </div>
+          <label>Body for PATCH /tasks/:id
+            <textarea id="updateBody" spellcheck="false" style="min-height:70px">{
+  "status": "P"
+}</textarea>
+          </label>
+          <div class="row" style="margin-top:10px">
+            <button type="button" data-action="updateTask"><span class="verb">PATCH</span> /tasks/:id</button>
+          </div>
+          <div class="row">
+            <label>Developer UUID for the assignment
+              <input id="developerField" class="uuid-input" placeholder="click a developer UUID in the response" spellcheck="false">
+            </label>
+            <button type="button" data-action="assignDeveloper"><span class="verb">PUT</span> /tasks/:id/assignee</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Custom request</h2>
+          <div class="row">
+            <label>Method
+              <select id="customMethod">
+                <option>GET</option><option>POST</option><option>PATCH</option><option>PUT</option><option>DELETE</option>
+              </select>
+            </label>
+            <label>Path
+              <input id="customPath" class="wide" value="/tasks" spellcheck="false">
+            </label>
+            <button type="button" data-action="customRequest" class="primary">Send</button>
+          </div>
+          <label>Body (sent exactly as typed, leave empty for none)
+            <textarea id="customBody" spellcheck="false" style="min-height:70px"></textarea>
+          </label>
+        </section>
+      </div>
+
+      <div class="sticky">
+        <section>
+          <h2>Response</h2>
+          <div id="responseMeta" class="message">Nothing sent yet.</div>
+          <pre id="responseBody">Click a UUID in a response to put it into the field you used last.</pre>
+        </section>
+        <section>
+          <h2>History</h2>
+          <ul id="history" class="history"></ul>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+    const MISSING_UUID = '00000000-0000-4000-8000-000000000000';
+    const HISTORY_LIMIT = 30;
+
+    const requestHistory = [];
+    let lastUuidField = $('idField');
+
+    function readStored(key, fallback) {
+      try {
+        return localStorage.getItem(key) ?? fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function writeStored(key, value) {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // storage can be blocked; the page still works without it
+      }
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function baseUrl() {
+      return $('baseUrl').value.trim().replace(/\/+$/, '');
+    }
+
+    // body: an object that is sent as JSON. rawBody: a string that is sent exactly as typed.
+    async function callApi(method, path, options = {}) {
+      const user = options.user ?? $('actingUser').value.trim();
+      const headers = {};
+      if (user) headers['x-acting-user'] = user;
+      const hasBody = options.body !== undefined || (options.rawBody ?? '') !== '';
+      if (hasBody) headers['content-type'] = 'application/json';
+      const payload = options.body !== undefined ? JSON.stringify(options.body) : options.rawBody;
+
+      const started = performance.now();
+      try {
+        const response = await fetch(baseUrl() + path, {
+          method,
+          headers,
+          body: hasBody ? payload : undefined,
+        });
+        const text = await response.text();
+        let data = text;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          // not JSON; keep the text
+        }
+        return {
+          method, path, data,
+          status: response.status,
+          statusText: response.statusText,
+          ms: Math.round(performance.now() - started),
+          sentBody: hasBody ? payload : '',
+        };
+      } catch (error) {
+        return {
+          method, path, data: null, status: 0, statusText: '',
+          ms: Math.round(performance.now() - started),
+          error: String(error && error.message ? error.message : error),
+          sentBody: hasBody ? payload : '',
+        };
+      }
+    }
+
+    function badgeClass(status) {
+      if (status >= 200 && status < 300) return 'ok';
+      if (status >= 400 && status < 500) return 'warn';
+      return 'bad';
+    }
+
+    function showResponse(result) {
+      const meta = $('responseMeta');
+      const body = $('responseBody');
+      if (result.status === 0) {
+        meta.innerHTML = '<span class="badge bad">No response</span> ' + escapeHtml(result.method + ' ' + result.path);
+        body.textContent = 'The browser could not read an answer from ' + baseUrl() + '.\n\n' +
+          'Either the API is not running at that address, or the browser blocked the call (CORS).\n' +
+          'For the second case add app.enableCors(); in webapp/src/main.ts and restart the API.\n\n' +
+          'Browser message: ' + result.error;
+        return;
+      }
+      meta.innerHTML = '<span class="badge ' + badgeClass(result.status) + '">' + result.status + ' ' +
+        escapeHtml(result.statusText) + '</span> ' + escapeHtml(result.method + ' ' + result.path) +
+        ' &middot; ' + result.ms + ' ms';
+      const pretty = typeof result.data === 'string'
+        ? (result.data === '' ? '(empty body)' : result.data)
+        : JSON.stringify(result.data, null, 2);
+      body.innerHTML = escapeHtml(pretty).replace(
+        UUID_PATTERN,
+        (uuid) => '<button type="button" class="uuid" data-uuid="' + uuid + '">' + uuid + '</button>',
+      );
+    }
+
+    function record(result) {
+      requestHistory.unshift(result);
+      if (requestHistory.length > HISTORY_LIMIT) requestHistory.pop();
+      $('history').innerHTML = '';
+      requestHistory.forEach((entry, index) => {
+        const item = document.createElement('li');
+        item.textContent = (entry.status || 'ERR') + '  ' + entry.method + ' ' + entry.path;
+        item.title = index === 0 ? 'latest' : 'click to show this response again';
+        item.addEventListener('click', () => showResponse(entry));
+        $('history').appendChild(item);
+      });
+    }
+
+    async function send(method, path, options) {
+      const result = await callApi(method, path, options);
+      record(result);
+      showResponse(result);
+      return result;
+    }
+
+    function requireField(field, label) {
+      const value = field.value.trim();
+      if (!value) {
+        $('responseMeta').innerHTML = '<span class="badge warn">Missing input</span>';
+        $('responseBody').textContent = 'Fill in the ' + label + ' first.';
+        field.focus();
+        return null;
+      }
+      return encodeURIComponent(value);
+    }
+
+    const actions = {
+      listSkills: () => send('GET', '/skills'),
+      listDevelopers: () => send('GET', '/developers'),
+      getSkill: () => {
+        const id = requireField($('idField'), 'UUID');
+        return id && send('GET', '/skills/' + id);
+      },
+      getDeveloper: () => {
+        const id = requireField($('idField'), 'UUID');
+        return id && send('GET', '/developers/' + id);
+      },
+      listTasks: () => send('GET', '/tasks?page=' + encodeURIComponent($('pageField').value) +
+        '&pageSize=' + encodeURIComponent($('pageSizeField').value)),
+      getTask: () => {
+        const id = requireField($('idField'), 'UUID');
+        return id && send('GET', '/tasks/' + id);
+      },
+      deleteTask: () => {
+        const id = requireField($('idField'), 'UUID');
+        return id && send('DELETE', '/tasks/' + id);
+      },
+      createTask: () => send('POST', '/tasks', { rawBody: $('createBody').value }),
+      updateTask: () => {
+        const id = requireField($('idField'), 'UUID');
+        return id && send('PATCH', '/tasks/' + id, { rawBody: $('updateBody').value });
+      },
+      assignDeveloper: () => {
+        const id = requireField($('idField'), 'UUID');
+        const developerUuid = $('developerField').value.trim();
+        if (!id) return null;
+        return send('PUT', '/tasks/' + id + '/assignee', { body: { developerUuid } });
+      },
+      customRequest: () => send($('customMethod').value, $('customPath').value.trim(), {
+        rawBody: $('customBody').value,
+      }),
+    };
+
+    document.querySelectorAll('[data-action]').forEach((button) => {
+      button.addEventListener('click', () => actions[button.dataset.action]());
+    });
+
+    document.querySelectorAll('input.uuid-input').forEach((input) => {
+      input.addEventListener('focus', () => { lastUuidField = input; });
+    });
+
+    $('responseBody').addEventListener('click', (event) => {
+      const chip = event.target.closest('button.uuid');
+      if (!chip) return;
+      lastUuidField.value = chip.dataset.uuid;
+    });
+
+    // Served by the API itself: call the same address, which needs no CORS setup.
+    const defaultBaseUrl = location.protocol.startsWith('http') ? location.origin : $('baseUrl').value;
+    $('baseUrl').value = readStored('apiTester.baseUrl', defaultBaseUrl);
+    $('actingUser').value = readStored('apiTester.actingUser', $('actingUser').value);
+    $('depthLimit').value = readStored('apiTester.depthLimit', $('depthLimit').value);
+    $('baseUrl').addEventListener('change', () => writeStored('apiTester.baseUrl', $('baseUrl').value));
+    $('actingUser').addEventListener('change', () => writeStored('apiTester.actingUser', $('actingUser').value));
+    $('depthLimit').addEventListener('change', () => writeStored('apiTester.depthLimit', $('depthLimit').value));
+
+    $('pingButton').addEventListener('click', async () => {
+      $('pingResult').textContent = 'Checking...';
+      const result = await callApi('GET', '/skills');
+      if (result.status === 0) {
+        $('pingResult').innerHTML = '<span class="badge bad">Cannot reach the API</span>';
+        showResponse(result);
+      } else if (result.status === 200) {
+        $('pingResult').innerHTML = '<span class="badge ok">Connected</span> ' + result.ms + ' ms';
+      } else {
+        $('pingResult').innerHTML = '<span class="badge warn">Reached the API, status ' + result.status + '</span>';
+      }
+    });
+
+    // ---- smoke test ----
+
+    const pass = (detail) => ({ outcome: 'pass', detail });
+    const fail = (detail) => ({ outcome: 'fail', detail });
+    const skip = (detail) => ({ outcome: 'skip', detail });
+
+    function serverMessage(result) {
+      const message = result.data && typeof result.data === 'object' ? result.data.message : '';
+      return Array.isArray(message) ? message.join('; ') : message || '';
+    }
+
+    // Passes when the status matches. The detail always shows what the server said.
+    function expectStatus(result, expected, extraCheck) {
+      const said = serverMessage(result);
+      const base = result.method + ' ' + result.path + ' -> ' + (result.status || 'no response') +
+        (said ? ' (' + said + ')' : '');
+      if (result.status !== expected) return fail(base + ', expected ' + expected);
+      if (extraCheck) {
+        const problem = extraCheck(result.data);
+        if (problem) return fail(base + ', but ' + problem);
+      }
+      return pass(base);
+    }
+
+    function nestedTask(levels) {
+      let node = { taskTitle: '[smoke] level ' + levels };
+      for (let level = levels - 1; level >= 0; level--) {
+        node = { taskTitle: '[smoke] level ' + level, subtasks: [node] };
+      }
+      return node;
+    }
+
+    const smokeSteps = [
+      {
+        name: 'GET /skills returns a list',
+        run: async (ctx) => {
+          const result = await callApi('GET', '/skills');
+          ctx.skills = Array.isArray(result.data) ? result.data : [];
+          return expectStatus(result, 200, (data) => (Array.isArray(data) && data.length > 0 ? '' : 'the list is empty'));
+        },
+      },
+      {
+        name: 'GET /developers returns a list with skills',
+        run: async (ctx) => {
+          const result = await callApi('GET', '/developers');
+          ctx.developers = Array.isArray(result.data) ? result.data : [];
+          return expectStatus(result, 200, (data) => (Array.isArray(data) && data.length > 0 ? '' : 'the list is empty'));
+        },
+      },
+      {
+        name: 'A call without x-acting-user is rejected',
+        run: async () => expectStatus(await callApi('GET', '/tasks', { user: '' }), 401),
+      },
+      {
+        name: 'A malformed uuid is rejected',
+        run: async () => expectStatus(await callApi('GET', '/tasks/not-a-uuid'), 400),
+      },
+      {
+        name: 'An unknown task uuid returns not found',
+        run: async () => expectStatus(await callApi('GET', '/tasks/' + MISSING_UUID), 404),
+      },
+      {
+        name: 'A body with an unknown field is rejected',
+        run: async () => expectStatus(await callApi('POST', '/tasks', { body: { taskTitle: '[smoke] bad', bogus: 1 } }), 400),
+      },
+      {
+        name: 'A blank title is rejected',
+        run: async () => expectStatus(await callApi('POST', '/tasks', { body: { taskTitle: '   ' } }), 400),
+      },
+      {
+        name: 'Create a task with a required skill and one subtask',
+        run: async (ctx) => {
+          if (!ctx.skills || ctx.skills.length === 0) return skip('no skills were loaded');
+          ctx.skill = ctx.skills[0];
+          const result = await callApi('POST', '/tasks', {
+            body: {
+              taskTitle: '[smoke] parent',
+              skillUuids: [ctx.skill.uuid],
+              subtasks: [{ taskTitle: '[smoke] child' }],
+            },
+          });
+          ctx.parent = result.status === 201 ? result.data : null;
+          return expectStatus(result, 201, (data) => {
+            if (!data || !data.uuid) return 'there is no uuid in the answer';
+            if (!Array.isArray(data.skills) || data.skills.length !== 1) return 'the skill was not saved';
+            return '';
+          });
+        },
+      },
+      {
+        name: 'Read the created task back',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('GET', '/tasks/' + ctx.parent.uuid), 200,
+            (data) => (data.taskTitle === '[smoke] parent' ? '' : 'the title is different'));
+        },
+      },
+      {
+        name: 'The subtask is linked to its parent',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          const result = await callApi('GET', '/tasks?page=1&pageSize=100');
+          const items = result.data && Array.isArray(result.data.items) ? result.data.items : [];
+          ctx.child = items.find((task) => task.parentUuid === ctx.parent.uuid) || null;
+          return expectStatus(result, 200, () => (ctx.child ? '' : 'no task has this parent'));
+        },
+      },
+      {
+        name: 'A task cannot be Done while a subtask is not Done',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('PATCH', '/tasks/' + ctx.parent.uuid, { body: { status: 'D' } }), 422);
+        },
+      },
+      {
+        name: 'A developer without the skill cannot be assigned',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          const developer = ctx.developers.find((d) => !d.skills.some((s) => s.uuid === ctx.skill.uuid));
+          if (!developer) return skip('every developer has the skill "' + ctx.skill.skillName + '"');
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.parent.uuid + '/assignee', {
+            body: { developerUuid: developer.uuid },
+          }), 422);
+        },
+      },
+      {
+        name: 'A developer with the skill can be assigned',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          const developer = ctx.developers.find((d) => d.skills.some((s) => s.uuid === ctx.skill.uuid));
+          if (!developer) return skip('no developer has the skill "' + ctx.skill.skillName + '"');
+          return expectStatus(await callApi('PUT', '/tasks/' + ctx.parent.uuid + '/assignee', {
+            body: { developerUuid: developer.uuid },
+          }), 200, (data) => (data.assignedDeveloper && data.assignedDeveloper.uuid === developer.uuid
+            ? '' : 'the assigned developer is different'));
+        },
+      },
+      {
+        name: 'A subtask can be set to Done',
+        run: async (ctx) => {
+          if (!ctx.child) return skip('the subtask was not found');
+          return expectStatus(await callApi('PATCH', '/tasks/' + ctx.child.uuid, { body: { status: 'D' } }), 200);
+        },
+      },
+      {
+        name: 'The task can be Done once every subtask is Done',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('PATCH', '/tasks/' + ctx.parent.uuid, { body: { status: 'D' } }), 200);
+        },
+      },
+      {
+        name: 'A subtask cannot leave Done while its parent is Done',
+        run: async (ctx) => {
+          if (!ctx.child) return skip('the subtask was not found');
+          return expectStatus(await callApi('PATCH', '/tasks/' + ctx.child.uuid, { body: { status: 'T' } }), 422);
+        },
+      },
+      {
+        name: 'Nesting deeper than the sysconfig limit is rejected',
+        run: async () => {
+          const limit = Number($('depthLimit').value);
+          if (!Number.isInteger(limit) || limit < 1) return skip('enter a whole-number depth limit above');
+          return expectStatus(await callApi('POST', '/tasks', { body: nestedTask(limit + 1) }), 400);
+        },
+      },
+      {
+        name: 'A task that still has subtasks cannot be deleted',
+        run: async (ctx) => {
+          if (!ctx.child) return skip('the subtask was not found');
+          return expectStatus(await callApi('DELETE', '/tasks/' + ctx.parent.uuid), 409);
+        },
+      },
+      {
+        name: 'Delete the subtask',
+        run: async (ctx) => {
+          if (!ctx.child) return skip('the subtask was not found');
+          return expectStatus(await callApi('DELETE', '/tasks/' + ctx.child.uuid), 204);
+        },
+      },
+      {
+        name: 'Delete the parent task',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('DELETE', '/tasks/' + ctx.parent.uuid), 204);
+        },
+      },
+      {
+        name: 'A deleted task is gone',
+        run: async (ctx) => {
+          if (!ctx.parent) return skip('the task was not created');
+          return expectStatus(await callApi('GET', '/tasks/' + ctx.parent.uuid), 404);
+        },
+      },
+    ];
+
+    const ICONS = { pass: '✔', fail: '✖', skip: '–' };
+
+    $('smokeButton').addEventListener('click', async () => {
+      const button = $('smokeButton');
+      const list = $('smokeChecks');
+      const counts = { pass: 0, fail: 0, skip: 0 };
+      const ctx = {};
+      button.disabled = true;
+      list.innerHTML = '';
+      $('smokeSummary').textContent = 'Running...';
+
+      for (const step of smokeSteps) {
+        let outcome;
+        try {
+          outcome = await step.run(ctx);
+        } catch (error) {
+          outcome = fail('the page threw: ' + (error && error.message ? error.message : error));
+        }
+        counts[outcome.outcome] += 1;
+        const item = document.createElement('li');
+        const title = document.createElement('span');
+        title.className = outcome.outcome;
+        title.textContent = ICONS[outcome.outcome] + ' ' + step.name;
+        const detail = document.createElement('span');
+        detail.className = 'detail';
+        detail.textContent = outcome.detail;
+        item.append(title, detail);
+        list.appendChild(item);
+
+        // If the very first call cannot reach the API there is no point in going on.
+        if (step === smokeSteps[0] && outcome.outcome === 'fail' && outcome.detail.includes('no response')) {
+          const result = await callApi('GET', '/skills');
+          showResponse(result);
+          break;
+        }
+      }
+
+      $('smokeSummary').innerHTML = '<span class="pass">' + counts.pass + ' passed</span>, ' +
+        '<span class="fail">' + counts.fail + ' failed</span>, ' +
+        '<span class="skip">' + counts.skip + ' skipped</span>';
+      button.disabled = false;
+    });
+  </script>
+</body>
+</html>
