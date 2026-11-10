@@ -1,9 +1,20 @@
-import { GeminiClient } from '../../../src/features/skillIdentification/llm/geminiClient.js';
+import {
+  GeminiClient,
+  toGeminiSchema,
+} from '../../../src/features/skillIdentification/llm/geminiClient.js';
+import type { LlmJsonRequest } from '../../../src/features/skillIdentification/llm/llmClient.js';
 
-const request = {
+const request: LlmJsonRequest = {
   systemPrompt: 'system',
   userPrompt: 'user',
-  responseSchema: { type: 'OBJECT' },
+  responseSchema: {
+    type: 'object',
+    properties: {
+      skills: { type: 'array', items: { type: 'string', enum: ['Backend'] } },
+    },
+    required: ['skills'],
+    additionalProperties: false,
+  },
 };
 
 function geminiAnswer(text: string): Response {
@@ -25,9 +36,11 @@ describe('GeminiClient', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('asks for JSON that follows the schema and parses the answer', async () => {
-    fetchFn.mockResolvedValue(geminiAnswer('{"tasks":[]}'));
+    fetchFn.mockResolvedValue(geminiAnswer('{"skills":["Backend"]}'));
 
-    await expect(client.generateJson(request)).resolves.toEqual({ tasks: [] });
+    await expect(client.generateJson(request)).resolves.toEqual({
+      skills: ['Backend'],
+    });
 
     const [url, init] = fetchFn.mock.calls[0];
     expect(url).toBe(
@@ -35,11 +48,8 @@ describe('GeminiClient', () => {
     );
     expect(init.headers['x-goog-api-key']).toBe('test-key');
     const body = JSON.parse(init.body);
-    expect(body.generationConfig).toEqual({
-      temperature: 0,
-      responseMimeType: 'application/json',
-      responseSchema: { type: 'OBJECT' },
-    });
+    expect(body.generationConfig.temperature).toBe(0);
+    expect(body.generationConfig.responseMimeType).toBe('application/json');
     expect(body.systemInstruction.parts[0].text).toBe('system');
     expect(body.contents[0].parts[0].text).toBe('user');
   });
@@ -73,5 +83,17 @@ describe('GeminiClient', () => {
     );
 
     await expect(client.generateJson(request)).rejects.toThrow('empty answer');
+  });
+});
+
+describe('toGeminiSchema', () => {
+  it('writes types in capitals and drops additionalProperties, at every level', () => {
+    expect(toGeminiSchema(request.responseSchema)).toEqual({
+      type: 'OBJECT',
+      properties: {
+        skills: { type: 'ARRAY', items: { type: 'STRING', enum: ['Backend'] } },
+      },
+      required: ['skills'],
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import {
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -8,6 +9,7 @@ import {
   Min,
   validateSync,
 } from 'class-validator';
+import { LLM_PROVIDERS } from '../constants/llmConfig.js';
 
 class EnvironmentVariables {
   @IsString() @IsNotEmpty() DB_HOST: string;
@@ -17,10 +19,17 @@ class EnvironmentVariables {
   @IsString() @IsNotEmpty() DB_NAME: string;
   @IsString() @IsNotEmpty() DB_SCHEMA: string;
 
-  // LLM skill identification. Without a key, tasks are created without
-  // identified skills instead of the app failing to start.
-  @IsOptional() @IsString() GEMINI_API_KEY?: string;
-  @IsOptional() @IsString() GEMINI_MODEL?: string;
+  // LLM skill identification. All optional: if the chosen provider is not
+  // fully configured, tasks are created without identified skills instead of
+  // the app failing to start.
+  @IsOptional()
+  @IsIn(LLM_PROVIDERS, {
+    message: `LLM_PROVIDER must be one of: ${LLM_PROVIDERS.join(', ')}`,
+  })
+  LLM_PROVIDER?: string;
+  @IsOptional() @IsString() LLM_API_KEY?: string;
+  @IsOptional() @IsString() LLM_MODEL?: string;
+  @IsOptional() @IsString() LLM_BASE_URL?: string;
   @IsOptional() @IsInt() @Min(1000) @Max(60000) LLM_TIMEOUT_MS?: number;
 }
 

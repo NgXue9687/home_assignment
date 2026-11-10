@@ -1,80 +1,62 @@
 import { Logger } from '@nestjs/common';
-import type { LlmClient, LlmJsonRequest } from './llmClient.js';
+import type { JsonSchema, LlmClient, LlmJsonRequest } from './llmClient.js';
+import { type LlmHttpOptions, parseJsonText, postJson } from './llmHttp.js';
 
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
-// Rate limited or a temporary server error: worth one more try.
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
-const RETRY_DELAY_MS = 500;
 
-export interface GeminiClientOptions {
+export interface GeminiClientOptions extends LlmHttpOptions {
   apiKey: string;
   model: string;
-  timeoutMs: number;
-  maxAttempts?: number;
-  fetchFn?: typeof fetch; // replaced in tests
 }
 
 interface GeminiResponse {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
 }
 
-// Calls the Gemini REST API directly (no SDK), asking for a JSON answer that
-// follows the given schema.
+// Google Gemini, through its own REST API (no SDK).
 export class GeminiClient implements LlmClient {
   private readonly logger = new Logger(GeminiClient.name);
-  private readonly fetchFn: typeof fetch;
-  private readonly maxAttempts: number;
 
-  constructor(private readonly options: GeminiClientOptions) {
-    this.fetchFn = options.fetchFn ?? fetch;
-    this.maxAttempts = options.maxAttempts ?? 2;
-  }
+  constructor(private readonly options: GeminiClientOptions) {}
 
   async generateJson(request: LlmJsonRequest): Promise<unknown> {
-    const url = `${GEMINI_BASE_URL}/models/${encodeURIComponent(this.options.model)}:generateContent`;
-    const body = JSON.stringify({
-      systemInstruction: { parts: [{ text: request.systemPrompt }] },
-      contents: [{ role: 'user', parts: [{ text: request.userPrompt }] }],
-      generationConfig: {
-        temperature: 0, // same title, same answer
-        responseMimeType: 'application/json',
-        responseSchema: request.responseSchema,
-      },
-    });
-
-    for (let attempt = 1; ; attempt++) {
-      const response = await this.fetchFn(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': this.options.apiKey,
+    const response = (await postJson(
+      'Gemini',
+      `${GEMINI_BASE_URL}/models/${encodeURIComponent(this.options.model)}:generateContent`,
+      { 'x-goog-api-key': this.options.apiKey },
+      {
+        systemInstruction: { parts: [{ text: request.systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: request.userPrompt }] }],
+        generationConfig: {
+          temperature: 0, // same title, same answer
+          responseMimeType: 'application/json',
+          responseSchema: toGeminiSchema(request.responseSchema),
         },
-        body,
-        signal: AbortSignal.timeout(this.options.timeoutMs),
-      });
-      if (response.ok) {
-        return parseAnswer((await response.json()) as GeminiResponse);
-      }
-      if (
-        attempt >= this.maxAttempts ||
-        !RETRYABLE_STATUSES.has(response.status)
-      ) {
-        throw new Error(`Gemini request failed with HTTP ${response.status}`);
-      }
-      this.logger.warn(
-        `Gemini returned HTTP ${response.status}, retrying (attempt ${attempt + 1} of ${this.maxAttempts})`,
-      );
-      await new Promise((resolve) =>
-        setTimeout(resolve, RETRY_DELAY_MS * attempt),
-      );
-    }
+      },
+      this.options,
+      this.logger,
+    )) as GeminiResponse;
+    const text = response.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text ?? '')
+      .join('');
+    return parseJsonText('Gemini', text);
   }
 }
 
-function parseAnswer(response: GeminiResponse): unknown {
-  const text = response.candidates?.[0]?.content?.parts
-    ?.map((part) => part.text ?? '')
-    .join('');
-  if (!text) throw new Error('Gemini returned an empty answer');
-  return JSON.parse(text);
+// Gemini's responseSchema writes types in capitals and has no additionalProperties.
+export function toGeminiSchema(schema: JsonSchema): Record<string, unknown> {
+  const { type, properties, items, additionalProperties: _, ...rest } = schema;
+  return {
+    ...rest,
+    type: type.toUpperCase(),
+    ...(properties && {
+      properties: Object.fromEntries(
+        Object.entries(properties).map(([name, property]) => [
+          name,
+          toGeminiSchema(property),
+        ]),
+      ),
+    }),
+    ...(items && { items: toGeminiSchema(items) }),
+  };
 }

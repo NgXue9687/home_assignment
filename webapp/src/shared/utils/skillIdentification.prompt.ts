@@ -1,5 +1,6 @@
 import type { CreateTaskDto } from '../../models/dto/createTask.dto.js';
 import type { SkillEntity } from '../../models/entity/skill.entity.js';
+import type { JsonSchema } from '../../features/skillIdentification/llm/llmClient.js';
 
 // The examples from the requirements, shown to the LLM as a guide (few-shot).
 const EXAMPLES: { title: string; skillNames: string[] }[] = [
@@ -77,31 +78,31 @@ export function buildUserPrompt(tasks: CreateTaskDto[]): string {
   ].join('\n');
 }
 
-export function buildResponseSchema(
-  skills: SkillEntity[],
-): Record<string, unknown> {
+export function buildResponseSchema(skills: SkillEntity[]): JsonSchema {
   return {
-    type: 'OBJECT',
+    type: 'object',
     properties: {
       tasks: {
-        type: 'ARRAY',
+        type: 'array',
         items: {
-          type: 'OBJECT',
+          type: 'object',
           properties: {
-            index: { type: 'INTEGER' },
+            index: { type: 'integer' },
             skills: {
-              type: 'ARRAY',
+              type: 'array',
               items: {
-                type: 'STRING',
+                type: 'string',
                 enum: skills.map((skill) => skill.skillName),
               },
             },
           },
           required: ['index', 'skills'],
+          additionalProperties: false,
         },
       },
     },
     required: ['tasks'],
+    additionalProperties: false,
   };
 }
 
