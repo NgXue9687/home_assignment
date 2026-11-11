@@ -10,7 +10,8 @@ import {
 } from "@mui/material";
 import { TaskFormCard } from "../components/taskFormCard";
 import { skillApi, taskApi } from "../shared/api";
-import { SKILL_ACTIVE_STATUS, type Skill } from "../shared/constants";
+import type { Skill } from "../models";
+import { SKILL_ACTIVE_STATUS } from "../shared/constants";
 import { useNotify } from "../shared/notifications/notificationContext";
 import {
   addSubtask,
@@ -71,7 +72,7 @@ export function TaskCreatePage() {
       );
       navigate("/tasks");
     } catch (error) {
-      notify("error", `Could not create the task: ${(error as Error).message}`);
+      notify("error", (error as Error).message);
       setSaving(false);
     }
   };

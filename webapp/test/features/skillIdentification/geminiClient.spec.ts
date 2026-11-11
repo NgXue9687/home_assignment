@@ -97,3 +97,45 @@ describe('toGeminiSchema', () => {
     });
   });
 });
+
+describe('GeminiClient network errors', () => {
+  it('says how long it waited when the request times out', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockRejectedValue(
+        Object.assign(new Error('The operation was aborted due to timeout'), {
+          name: 'TimeoutError',
+        }),
+      );
+    const client = new GeminiClient({
+      apiKey: 'k',
+      model: 'm',
+      timeoutMs: 15000,
+      fetchFn,
+    });
+
+    await expect(client.generateJson(request)).rejects.toThrow(
+      'Gemini did not answer within 15000 ms (LLM_TIMEOUT_MS)',
+    );
+  });
+
+  it('says why the provider could not be reached', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockRejectedValue(
+        Object.assign(new TypeError('fetch failed'), {
+          cause: { code: 'ENOTFOUND' },
+        }),
+      );
+    const client = new GeminiClient({
+      apiKey: 'k',
+      model: 'm',
+      timeoutMs: 15000,
+      fetchFn,
+    });
+
+    await expect(client.generateJson(request)).rejects.toThrow(
+      /Could not reach Gemini \(ENOTFOUND\)/,
+    );
+  });
+});

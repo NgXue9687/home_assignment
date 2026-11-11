@@ -1,5 +1,5 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { AssignDeveloperDto } from '../../../src/models/dto/assignDeveloper.dto.js';
+import { AssignDeveloperDto } from '../../../src/models/dto/request/assignDeveloper.dto.js';
 
 // The same options as main.ts, so the test sees what a request would see.
 const validationPipe = new ValidationPipe({

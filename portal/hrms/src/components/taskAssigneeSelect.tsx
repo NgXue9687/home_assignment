@@ -1,5 +1,5 @@
 import { ListSubheader, MenuItem, Select } from "@mui/material";
-import type { Developer, Task } from "../shared/constants";
+import type { Developer, Task } from "../models";
 import { eligibleDevelopers } from "../shared/taskAssignment";
 
 const UNASSIGNED = "";
@@ -22,8 +22,8 @@ export function TaskAssigneeSelect({
 }: TaskAssigneeSelectProps) {
   const options = eligibleDevelopers(task, developers);
   const current = task.assignedDeveloper;
+  
   // Keep the current assignee selectable even if they no longer qualify
-  // (e.g. made inactive), so the dropdown still shows who it is.
   const currentIsMissing =
     current !== null && !options.some((developer) => developer.uuid === current.uuid);
 

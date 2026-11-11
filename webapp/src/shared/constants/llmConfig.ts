@@ -12,5 +12,5 @@ export const LLM_PROVIDERS = Object.values(LlmProvider);
 export const LlmDefaults = {
   PROVIDER: LlmProvider.GEMINI,
   GEMINI_MODEL: 'gemini-3.5-flash-lite',
-  TIMEOUT_MS: 5000,
+  TIMEOUT_MS: 15000, // per attempt; free-tier responses can take several seconds
 } as const;

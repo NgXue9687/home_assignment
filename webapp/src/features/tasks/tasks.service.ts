@@ -13,8 +13,8 @@ import { DeveloperEntity } from '../../models/entity/developer.entity.js';
 import { SkillEntity } from '../../models/entity/skill.entity.js';
 import { TaskMapperEntity } from '../../models/entity/taskMapper.entity.js';
 import { TaskSkillMapperEntity } from '../../models/entity/taskSkillMapper.entity.js';
-import { CreateTaskDto } from '../../models/dto/createTask.dto.js';
-import { UpdateTaskDto } from '../../models/dto/updateTask.dto.js';
+import { CreateTaskDto } from '../../models/dto/request/createTask.dto.js';
+import { UpdateTaskDto } from '../../models/dto/request/updateTask.dto.js';
 import {
   TaskResponseDto,
   toTaskResponse,
@@ -55,6 +55,12 @@ export class TasksService {
     private readonly skillIdentificationService: SkillIdentificationService,
   ) {}
 
+  /**
+   *
+   * @param dto Created Task Details from frontend
+   * @param currentUser Current user creating the task
+   * @returns   Created Task from the database
+   */
   async create(
     dto: CreateTaskDto,
     currentUser: string,
@@ -78,6 +84,11 @@ export class TasksService {
     return this.findOne(savedTask.uuid);
   }
 
+  /**
+   *
+   * @param query  To retrieve the associated tasks based on query
+   * @returns       Pagination of the list of tasks
+   */
   async findAll(
     query: ListTasksQueryDto,
   ): Promise<PagedResponseDto<TaskResponseDto>> {
@@ -162,6 +173,7 @@ export class TasksService {
     return this.findOne(taskUuid);
   }
 
+  // Deletes a Task, but only soft deleted
   async remove(uuid: string, currentUser: string): Promise<void> {
     const task = await this.findEntity(uuid);
     const subtaskCount = await this.tasksRepository.count({
@@ -188,6 +200,8 @@ export class TasksService {
   ): Promise<TaskEntity> {
     const subtaskDtos = dto.subtasks ?? [];
     const status = dto.status ?? TaskStatus.TODO;
+
+    // Check if there is still Subtasks that is not updated to Done
     if (
       status === TaskStatus.DONE &&
       hasUnfinishedSubtasks(
@@ -245,6 +259,12 @@ export class TasksService {
     return task;
   }
 
+  /**
+   *
+   * @param manager       Find respository associated with current Entity
+   * @param task          Task Entity
+   * @param currentUser   Current User replacing the assignee
+   */
   private async removeAssignee(
     manager: EntityManager,
     task: TaskEntity,
@@ -258,6 +278,13 @@ export class TasksService {
     );
   }
 
+  /**
+   *
+   * @param manager       Find respository associated with current Entity
+   * @param task          Task Entity
+   * @param developerUuid Uuid of Developer
+   * @param currentUser   Current User replacing the assignee
+   */
   private async replaceAssignee(
     manager: EntityManager,
     task: TaskEntity,
@@ -268,6 +295,8 @@ export class TasksService {
       where: { uuid: developerUuid },
       relations: { developerSkillMappers: true },
     });
+
+    // Unable to find the developer from database
     if (!developer)
       throw new NotFoundException(
         SysMessageFormat.developerNotFound(developerUuid),
@@ -277,12 +306,15 @@ export class TasksService {
       task.taskSkillMappers.map((mapper) => mapper.skillId),
       developer.developerSkillMappers.map((mapper) => mapper.skillId),
     );
+
+    // Developer does not have the necessary skills for the task
     if (missingSkillIds.length > 0) {
       throw new UnprocessableEntityException(
         SysMessageFormat.developerLacksSkills(developer.name, task.uuid),
       );
     }
 
+    // Delete the previous Task Mapping and create a new Task Mapping with the new developer assigned
     await manager.delete(TaskMapperEntity, { taskId: task.taskId });
     await manager.save(
       manager.create(TaskMapperEntity, {
@@ -294,6 +326,12 @@ export class TasksService {
     );
   }
 
+  /**
+   * Helper Method to check if Subtasks Task Status are Done.
+   *
+   * @param manager Find respository associated with current Entity
+   * @param task    Task Entity  
+   */
   private async assertSubtasksAreDone(
     manager: EntityManager,
     task: TaskEntity,
@@ -307,7 +345,12 @@ export class TasksService {
     }
   }
 
-  // A Done parent needs every subtask Done, so a subtask cannot leave Done under it.
+  /**
+   * Helper Method to check if Parent Task Status is not Done.
+   *
+   * @param manager Find respository associated with current Entity
+   * @param task    Task Entity  
+   */
   private async assertParentIsNotDone(
     manager: EntityManager,
     task: TaskEntity,
@@ -322,6 +365,12 @@ export class TasksService {
     }
   }
 
+  /**
+   *
+   * @param uuid         Uuid of Task
+   * @param relations    Relationship of TaskEntity with other table columns, taskSkillMappers, taskMappers, parenttask column
+   * @returns             Task found from Database
+   */
   private async findEntity(
     uuid: string,
     relations?: FindOptionsRelations<TaskEntity>,

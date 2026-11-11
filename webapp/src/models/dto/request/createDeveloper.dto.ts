@@ -9,7 +9,7 @@ import {
 import {
   RECORD_STATUSES,
   RecordStatus,
-} from '../../shared/constants/recordStatus.js';
+} from '../../../shared/constants/recordStatus.js';
 
 export class CreateDeveloperDto {
   @IsString()

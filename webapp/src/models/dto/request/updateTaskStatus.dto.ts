@@ -2,7 +2,7 @@ import { IsIn } from 'class-validator';
 import {
   TASK_STATUSES,
   TaskStatus,
-} from '../../shared/constants/taskStatus.js';
+} from '../../../shared/constants/taskStatus.js';
 
 export class UpdateTaskStatus {
   @IsIn(TASK_STATUSES, {

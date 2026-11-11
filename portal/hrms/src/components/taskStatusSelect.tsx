@@ -1,8 +1,6 @@
 import { MenuItem, Select } from "@mui/material";
-import {
-  TASK_STATUS_LABELS,
-  type TaskStatusCode,
-} from "../shared/constants";
+import type { TaskStatusCode } from "../models";
+import { TASK_STATUS_LABELS } from "../shared/constants";
 
 const STATUS_OPTIONS = Object.entries(TASK_STATUS_LABELS) as [TaskStatusCode, string][];
 

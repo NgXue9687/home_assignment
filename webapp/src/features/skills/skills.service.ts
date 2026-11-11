@@ -15,6 +15,10 @@ export class SkillsService {
     private readonly skillsRepository: Repository<SkillEntity>,
   ) {}
 
+  /**
+   *
+   * @returns List of Skills from the database in Ascending Order
+   */
   async findAll(): Promise<SkillResponseDto[]> {
     const skills = await this.skillsRepository.find({
       order: { skillName: 'ASC' },
@@ -22,6 +26,11 @@ export class SkillsService {
     return skills.map(toSkillResponse);
   }
 
+  /**
+   *
+   * @param uuid Uuid of the Skill
+   * @returns    A single Skill from the database
+   */
   async findOne(uuid: string): Promise<SkillResponseDto> {
     const skill = await this.skillsRepository.findOneBy({ uuid });
     if (!skill)

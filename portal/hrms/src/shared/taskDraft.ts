@@ -1,9 +1,8 @@
+import { TASK_STATUS, type TaskStatusCode } from "../models";
 import {
   MAX_SUBTASK_DEPTH,
   TASK_DESCRIPTION_MAX_LENGTH,
-  TASK_STATUS,
   TASK_TITLE_MAX_LENGTH,
-  type TaskStatusCode,
 } from "./constants";
 
 // A task (or subtask) being filled in on the Create Task page. Subtasks have

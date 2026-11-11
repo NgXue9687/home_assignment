@@ -1,4 +1,4 @@
-import type { CreateTaskDto } from '../../models/dto/createTask.dto.js';
+import type { CreateTaskDto } from '../../models/dto/request/createTask.dto.js';
 import type { SkillEntity } from '../../models/entity/skill.entity.js';
 import type { JsonSchema } from '../../features/skillIdentification/llm/llmClient.js';
 

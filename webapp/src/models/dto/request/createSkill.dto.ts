@@ -2,7 +2,7 @@ import { IsString, IsNotEmpty, MaxLength, IsIn } from 'class-validator';
 import {
   RECORD_STATUSES,
   RecordStatus,
-} from '../../shared/constants/recordStatus.js';
+} from '../../../shared/constants/recordStatus.js';
 
 export class CreateSkillDto {
   @IsString()

@@ -1,4 +1,4 @@
-import type { SortOrder, Task, TaskColumn } from "./constants";
+import type { SortOrder, Task, TaskColumn } from "../models";
 
 // Returns a sorted copy of the tasks by one column. Rows without a value
 // (e.g. no assigned developer) always go last, whichever the direction.

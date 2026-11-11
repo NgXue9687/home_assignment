@@ -1,75 +1,77 @@
-# React + TypeScript + Vite
+# HTX Task Assignment — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript single-page application for listing, creating and assigning tasks. For the whole application (setup, system design, API) see the [main README](../../README.md).
 
-Currently, two official plugins are available:
+## Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Requires Node.js 22+ and the backend running on port 3000.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev     # http://localhost:4000
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+In development, Vite forwards every `/api/*` request to `http://localhost:3000` (see `vite.config.ts`), so the browser only talks to one origin and the backend needs no CORS setup.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Optional settings go in `.env` (see `.env.example`):
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Variable | Default | Description |
+|---|---|---|
+| `VITE_API_BASE_URL` | `/api` | Where API calls go |
+| `VITE_ACTING_USER` | `portal-user` | Sent as the `x-acting-user` header the backend requires (max 20 characters) |
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Development server with hot reload (port 4000) |
+| `npm run build` | Type-check and build to `dist/` |
+| `npm run preview` | Serve the production build |
+| `npm run lint` | ESLint |
+
+## Pages
+
+| URL | Page | What it does |
+|---|---|---|
+| `/tasks` | Task List | All tasks and subtasks, sortable by every column. Status and assignee are changed inline and saved immediately; only developers with all the task's skills are offered. Delete asks for confirmation and is disabled while a task has subtasks. |
+| `/tasks/create` | Create Task(s) | A form for the task and any number of nested subtasks. Each card has title, description, status and skills; leaving skills empty lets the backend identify them with the LLM. |
+| anything else | | Redirects to `/tasks` |
+
+Every change shows a toast and is recorded in the **activity log** (bottom-right button), which keeps the session's history.
+
+## How the Create page handles nesting
+
+Each task card is the same component, `TaskFormCard`. It renders its own fields, then renders a `TaskFormCard` for each of its subtasks, one level further in, so any depth is drawn with one component (brief 4.3). The form's data is a tree (`TaskDraft`, with `subtasks: TaskDraft[]`); helpers in `shared/taskDraft.ts` add, update and remove nodes without changing the old tree, validate it with the same rules as the backend, and convert it to the `POST /tasks` body. The whole tree is saved in one request.
+
+The maximum depth comes from the backend's `MAX_SUBTASK_LIST_SIZE` setting, loaded once at start-up into the Redux store; *Add Subtask* is disabled at the limit.
+
+## Project structure
 
 ```
+src/
+├── main.tsx            # Redux Provider + router
+├── routes.tsx          # /tasks, /tasks/create, redirect
+├── layouts/            # MainLayout: header, notifications, loads settings
+├── pages/              # taskListingPage, taskCreatePage
+├── components/         # taskFormCard (recursive), status/assignee selects,
+│                       # confirmDialog, activityLog, header
+├── models/             # data shapes from the API (Task, Developer, Skill…)
+├── shared/
+│   ├── api.ts          # API client: x-acting-user header, readable errors
+│   ├── constants.ts    # labels, colours, table columns, limits
+│   ├── notifications/  # toast + activity log (useNotify)
+│   ├── taskDraft.ts    # Create-page form tree: helpers, validation, request
+│   ├── taskSort.ts     # table sorting
+│   └── taskAssignment.ts  # which developers can take a task
+└── store/              # Redux store: settings from GET /sysconfigs
+```
+
+## Libraries
+
+| Library | Why |
+|---|---|
+| React + TypeScript | Required by the brief |
+| Vite | Fast dev server and build; its proxy removes the need for CORS |
+| React Router | Client-side routing for the single-page application |
+| MUI + Emotion | Accessible ready-made components: sortable tables, selects, dialogs, toasts |
+| Redux Toolkit + React Redux | Settings loaded once and shared by every page |

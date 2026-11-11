@@ -15,6 +15,10 @@ export class DevelopersService {
     private readonly developersRepository: Repository<DeveloperEntity>,
   ) {}
 
+  /**
+   *
+   * @returns List of developers from database
+   */
   async findAll(): Promise<DeveloperResponseDto[]> {
     const developers = await this.developersRepository.find({
       relations: { developerSkillMappers: { skill: true } },
@@ -22,6 +26,12 @@ export class DevelopersService {
     });
     return developers.map(toDeveloperResponse);
   }
+
+  /**
+   *
+   * @param uuid Uuid of the Developer
+   * @returns    A single developer based on uuid
+   */
 
   async findOne(uuid: string): Promise<DeveloperResponseDto> {
     const developer = await this.developersRepository.findOne({

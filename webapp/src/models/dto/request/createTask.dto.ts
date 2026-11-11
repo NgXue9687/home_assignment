@@ -13,7 +13,7 @@ import {
 import {
   TASK_STATUSES,
   TaskStatus,
-} from '../../shared/constants/taskStatus.js';
+} from '../../../shared/constants/taskStatus.js';
 
 // Trims strings so "   " counts as empty and stray spaces aren't stored.
 const Trim = () =>

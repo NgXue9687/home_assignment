@@ -5,6 +5,8 @@ export const SysMessage = {
   SUBTASKS_NOT_DONE: 'A task can only be Done when all its subtasks are Done',
   TASK_HAS_SUBTASKS: 'Delete the subtasks of this task first',
   SKILLS_NOT_FOUND: 'One or more skillUuids do not exist',
+  // Shown when the LLM could not identify skills; the real reason is only logged.
+  TASK_SAVE_FAILED: 'Failed to save the task, please try again',
 } as const;
 
 export type SysMessage = (typeof SysMessage)[keyof typeof SysMessage];

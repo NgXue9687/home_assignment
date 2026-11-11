@@ -1,4 +1,5 @@
-import { DEVELOPER_ACTIVE_STATUS, type Developer, type Task } from "./constants";
+import type { Developer, Task } from "../models";
+import { DEVELOPER_ACTIVE_STATUS } from "./constants";
 
 // Active developers who have every skill the task needs. The backend rejects
 // anyone else, so only these are offered. A task without skills can go to anyone.

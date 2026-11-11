@@ -1,6 +1,8 @@
-import type { Developer, PagedResponse, Skill, Task, TaskStatusCode } from "./constants";
+
 import type { CreateTaskRequest } from "./taskDraft";
 import { TASK_PAGE_SIZE } from "./constants";
+import type { SysConfig } from "../models/sysConfig.model";
+import type { Developer, PagedResponse, Skill, Task, TaskStatusCode } from "../models";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 // The backend's UserActionGuard rejects requests without this header (max 20
@@ -55,6 +57,7 @@ async function readErrorMessage(response: Response): Promise<string> {
   return `Request failed (HTTP ${response.status})`;
 }
 
+// API to Task Controller in Web App
 export const taskApi = {
   // Creates a task together with all its subtasks, in one request.
   create: (task: CreateTaskRequest) =>
@@ -66,6 +69,11 @@ export const taskApi = {
   changeStatus: (taskUuid: string, status: TaskStatusCode) =>
     request<Task>(`/tasks/${taskUuid}/status`, { method: "PUT", body: { status } }),
 
+  // Deletes a task (the backend keeps it as soft-deleted). Fails with 409 while
+  // the task still has subtasks.
+  remove: (taskUuid: string) =>
+    request<void>(`/tasks/${taskUuid}`, { method: "DELETE" }),
+
   // null removes the current assignee.
   assignDeveloper: (taskUuid: string, developerUuid: string | null) =>
     request<Task>(`/tasks/${taskUuid}/assignee`, {
@@ -74,10 +82,16 @@ export const taskApi = {
     }),
 };
 
+// API to Developers Controller in Web App
 export const developerApi = {
   list: () => request<Developer[]>("/developers"),
 };
 
+// API to Skills Controller in Web App
 export const skillApi = {
   list: () => request<Skill[]>("/skills"),
 };
+
+export const sysConfigApi ={
+  list: () => request<SysConfig[]>("/sysconfigs") 
+}

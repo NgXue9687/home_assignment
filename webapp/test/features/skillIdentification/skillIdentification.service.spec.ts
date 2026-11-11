@@ -1,9 +1,10 @@
 import { Test } from '@nestjs/testing';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { SkillIdentificationService } from '../../../src/features/skillIdentification/skillIdentification.service.js';
 import { LLM_CLIENT } from '../../../src/features/skillIdentification/llm/llmClient.js';
 import { SkillEntity } from '../../../src/models/entity/skill.entity.js';
-import { CreateTaskDto } from '../../../src/models/dto/createTask.dto.js';
+import { CreateTaskDto } from '../../../src/models/dto/request/createTask.dto.js';
 
 const frontend = Object.assign(new SkillEntity(), {
   skillId: '1',
@@ -90,17 +91,17 @@ describe('SkillIdentificationService', () => {
     expect(identified.size).toBe(0);
   });
 
-  it('does nothing when no LLM is configured', async () => {
-    const identified = await (
-      await createService(null)
-    ).identifyForTaskTree({ taskTitle: 'Task' });
-
+  it('refuses to save when no LLM is configured', async () => {
+    await expect(
+      (await createService(null)).identifyForTaskTree({ taskTitle: 'Task' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(skillsRepository.find).not.toHaveBeenCalled();
-    expect(identified.size).toBe(0);
   });
 
   it('limits the LLM to the skills in the database', async () => {
-    llmClient.generateJson.mockResolvedValue({ tasks: [] });
+    llmClient.generateJson.mockResolvedValue({
+      tasks: [{ index: 0, skills: ['Backend'] }],
+    });
 
     await (await createService()).identifyForTaskTree({ taskTitle: 'Task' });
 
@@ -123,25 +124,30 @@ describe('SkillIdentificationService', () => {
     expect(identified.get(task)).toEqual([frontend]);
   });
 
-  it('ignores answers for tasks that were not asked about', async () => {
+  it('refuses to save when the answer leaves a task without skills', async () => {
     llmClient.generateJson.mockResolvedValue({
       tasks: [{ index: 7, skills: ['Backend'] }, { index: 'x' }, null],
     });
 
-    const identified = await (
-      await createService()
-    ).identifyForTaskTree({ taskTitle: 'Task' });
-
-    expect(identified.size).toBe(0);
+    await expect(
+      (await createService()).identifyForTaskTree({ taskTitle: 'Task' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
-  it('returns no skills instead of failing when the LLM fails', async () => {
+  it('refuses to save, with a message to try again, when the LLM fails', async () => {
     llmClient.generateJson.mockRejectedValue(new Error('HTTP 503'));
 
-    const identified = await (
-      await createService()
-    ).identifyForTaskTree({ taskTitle: 'Task' });
+    await expect(
+      (await createService()).identifyForTaskTree({ taskTitle: 'Task' }),
+    ).rejects.toThrow('Failed to save the task, please try again');
+  });
 
-    expect(identified.size).toBe(0);
+  it('refuses to save when there are no active skills', async () => {
+    skillsRepository.find.mockResolvedValue([]);
+
+    await expect(
+      (await createService()).identifyForTaskTree({ taskTitle: 'Task' }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(llmClient.generateJson).not.toHaveBeenCalled();
   });
 });

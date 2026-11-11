@@ -16,23 +16,21 @@ import {
   TableHead,
   TableRow,
   TableSortLabel,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { visuallyHidden } from "@mui/utils";
+import type { Developer, SortOrder, Task, TaskColumnId, TaskStatusCode } from "../models";
 import {
   DEFAULT_TASK_SORT,
   TASK_COLUMNS,
   TASK_STATUS_LABELS,
-  type Developer,
-  type SortOrder,
-  type Task,
-  type TaskColumnId,
-  type TaskStatusCode,
 } from "../shared/constants";
 import { sortTasks } from "../shared/taskSort";
 import { developerApi, taskApi } from "../shared/api";
 import { TaskStatusSelect } from "../components/taskStatusSelect";
 import { TaskAssigneeSelect } from "../components/taskAssigneeSelect";
+import { ConfirmDialog } from "../components/confirmDialog";
 import { useNotify } from "../shared/notifications/notificationContext";
 
 const StyledTableCell = styled(TableCell)(({ theme }) => ({
@@ -122,6 +120,40 @@ function renderCell(task: Task, columnId: TaskColumnId, context: CellContext) {
   }
 }
 
+// The Delete button for one row. Disabled while the task has subtasks, with a
+// tooltip saying why (a disabled button gets no mouse events, hence the span).
+function DeleteTaskButton({
+  subtaskCount,
+  disabled,
+  onClick,
+}: {
+  subtaskCount: number;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const hasSubtasks = subtaskCount > 0;
+  return (
+    <Tooltip
+      title={
+        hasSubtasks
+          ? `Delete its ${subtaskCount} subtask${subtaskCount > 1 ? "s" : ""} first`
+          : ""
+      }
+    >
+      <span>
+        <Button
+          size="small"
+          color="error"
+          disabled={disabled || hasSubtasks}
+          onClick={onClick}
+        >
+          Delete
+        </Button>
+      </span>
+    </Tooltip>
+  );
+}
+
 export function TaskListingPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [totalTasks, setTotalTasks] = useState(0);
@@ -132,6 +164,8 @@ export function TaskListingPage() {
   const [savingUuids, setSavingUuids] = useState<Set<string>>(new Set());
   const notify = useNotify();
   const [sort, setSort] = useState(DEFAULT_TASK_SORT);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Load tasks and developers when the page opens (and on Retry).
   useEffect(() => {
@@ -170,6 +204,16 @@ export function TaskListingPage() {
     () => new Map(tasks.map((task) => [task.uuid, task.taskTitle])),
     [tasks],
   );
+
+  // How many subtasks each task has. A task with subtasks can't be deleted
+  // (the backend refuses), so its Delete button is disabled.
+  const subtaskCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of tasks) {
+      if (task.parentUuid) counts.set(task.parentUuid, (counts.get(task.parentUuid) ?? 0) + 1);
+    }
+    return counts;
+  }, [tasks]);
 
   // Clicking the sorted column flips the direction; clicking another column sorts it A→Z.
   const handleSort = (columnId: TaskColumnId) => {
@@ -231,6 +275,24 @@ export function TaskListingPage() {
     );
   };
 
+  // Runs after the user confirms in the dialog.
+  const handleDelete = async () => {
+    if (!taskToDelete) return;
+    const task = taskToDelete;
+    setDeleting(true);
+    try {
+      await taskApi.remove(task.uuid);
+      setTasks((current) => current.filter((t) => t.uuid !== task.uuid));
+      setTotalTasks((total) => total - 1);
+      notify("success", `"${shortTitle(task)}": deleted`);
+    } catch (error) {
+      notify("error", `Could not delete "${shortTitle(task)}": ${(error as Error).message}`);
+    } finally {
+      setDeleting(false);
+      setTaskToDelete(null);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
@@ -286,6 +348,7 @@ export function TaskListingPage() {
                   </StyledTableCell>
                 );
               })}
+              <StyledTableCell align="right">Actions</StyledTableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -308,12 +371,19 @@ export function TaskListingPage() {
                       {renderCell(task, column.id, context)}
                     </StyledTableCell>
                   ))}
+                  <StyledTableCell align="right">
+                    <DeleteTaskButton
+                      subtaskCount={subtaskCounts.get(task.uuid) ?? 0}
+                      disabled={context.saving}
+                      onClick={() => setTaskToDelete(task)}
+                    />
+                  </StyledTableCell>
                 </StyledTableRow>
               );
             })}
             {sortedTasks.length === 0 && (
               <TableRow>
-                <TableCell colSpan={TASK_COLUMNS.length} align="center">
+                <TableCell colSpan={TASK_COLUMNS.length + 1} align="center">
                   No available tasks yet.
                 </TableCell>
               </TableRow>
@@ -327,6 +397,22 @@ export function TaskListingPage() {
           Showing the first {tasks.length} of {totalTasks} tasks.
         </Typography>
       )}
+
+      <ConfirmDialog
+        open={taskToDelete !== null}
+        title="Delete task?"
+        message={
+          taskToDelete && (
+            <>
+              <strong>{taskToDelete.taskTitle}</strong> will be removed from the task list.
+            </>
+          )
+        }
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setTaskToDelete(null)}
+      />
     </>
   );
 }

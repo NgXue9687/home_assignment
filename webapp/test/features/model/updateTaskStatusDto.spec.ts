@@ -1,6 +1,5 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { UpdateTaskStatus } from '../../../src/models/dto/updateTaskStatus.dto.js';
-
+import { UpdateTaskStatus } from '../../../src/models/dto/request/updateTaskStatus.dto.js';
 
 // The same options as main.ts, so the test sees what a request would see.
 const validationPipe = new ValidationPipe({

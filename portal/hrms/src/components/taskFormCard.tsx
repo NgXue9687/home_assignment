@@ -10,15 +10,16 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import type { Skill, TaskStatusCode } from "../models";
 import {
   MAX_SUBTASK_DEPTH,
   TASK_DESCRIPTION_MAX_LENGTH,
   TASK_STATUS_LABELS,
   TASK_TITLE_MAX_LENGTH,
-  type Skill,
-  type TaskStatusCode,
 } from "../shared/constants";
 import type { DraftErrors, TaskDraft } from "../shared/taskDraft";
+import { useAppSelector } from "../store/hooks";
+import { selectMaxSubtaskDepth } from "../store/sysConfigslice";
 
 const STATUS_OPTIONS = Object.entries(TASK_STATUS_LABELS) as [TaskStatusCode, string][];
 
@@ -47,9 +48,10 @@ export function TaskFormCard({
   onAddSubtask,
   onRemove,
 }: TaskFormCardProps) {
+  const maxDepth = useAppSelector(selectMaxSubtaskDepth);
   const cardErrors = errors.get(draft.key) ?? {};
   const isMainTask = depth === 0;
-  const canAddSubtask = depth < MAX_SUBTASK_DEPTH;
+  const canAddSubtask = depth < maxDepth;
   const selectedSkills = skills.filter((skill) => draft.skillUuids.includes(skill.uuid));
   const heading = isMainTask ? `Task ${label}` : `Subtask ${label}`;
 

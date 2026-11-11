@@ -1,4 +1,4 @@
-// Names of the rows in the sysconfig table.
+// Names of the keys of sysconfig in the table.
 export const SysConfigKey = {
   MAX_SUBTASK_LIST_SIZE: 'MAX_SUBTASK_LIST_SIZE',
 } as const;

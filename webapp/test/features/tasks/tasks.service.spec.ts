@@ -4,13 +4,14 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { TasksService } from '../../../src/features/tasks/tasks.service.js';
 import { TaskEntity } from '../../../src/models/entity/task.entity.js';
 import { TaskMapperEntity } from '../../../src/models/entity/taskMapper.entity.js';
 import { ListTasksQueryDto } from '../../../src/models/dto/query/listTasksQuery.dto.js';
-import { CreateTaskDto } from '../../../src/models/dto/createTask.dto.js';
+import { CreateTaskDto } from '../../../src/models/dto/request/createTask.dto.js';
 import { SysConfigService } from '../../../src/features/sysconfig/sysconfig.service.js';
 import { SkillIdentificationService } from '../../../src/features/skillIdentification/skillIdentification.service.js';
 import { SkillEntity } from '../../../src/models/entity/skill.entity.js';
@@ -198,7 +199,7 @@ describe('TasksService subtasks', () => {
   let nextTaskId = 0;
 
   const manager = {
-     findBy: vi.fn(),
+    findBy: vi.fn(),
     findOne: vi.fn(),
     find: vi.fn(),
     query: vi.fn(),
@@ -236,7 +237,7 @@ describe('TasksService subtasks', () => {
     sysConfigService.getInt.mockResolvedValue(5);
     skillIdentificationService.identifyForTaskTree.mockResolvedValue(new Map());
     manager.findBy.mockResolvedValue([]);
-     manager.findOne.mockResolvedValue(aTask());
+    manager.findOne.mockResolvedValue(aTask());
     manager.find.mockResolvedValue([]);
     manager.query.mockResolvedValue([]);
     manager.save.mockImplementation(async (value: unknown) =>
@@ -259,7 +260,7 @@ describe('TasksService subtasks', () => {
     tasksService = moduleRef.get(TasksService);
   });
 
-    it('refuses to mark a task Done while a subtask is not Done', async () => {
+  it('refuses to mark a task Done while a subtask is not Done', async () => {
     manager.find.mockResolvedValue([{ status: 'D' }, { status: 'T' }]);
 
     await expect(
@@ -267,7 +268,6 @@ describe('TasksService subtasks', () => {
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
     expect(manager.save).not.toHaveBeenCalled();
   });
-
 
   it('marks a task Done when all its subtasks are Done', async () => {
     manager.find.mockResolvedValue([{ status: 'D' }, { status: 'D' }]);
@@ -284,7 +284,7 @@ describe('TasksService subtasks', () => {
     expect(tasksRepository.findOne).toHaveBeenCalledTimes(2);
   });
 
-it('does not check subtasks when the status is changed to In Progress', async () => {
+  it('does not check subtasks when the status is changed to In Progress', async () => {
     await tasksService.changeStatus('task-uuid', 'P', 'Bob');
 
     expect(manager.find).not.toHaveBeenCalled();
@@ -393,7 +393,7 @@ it('does not check subtasks when the status is changed to In Progress', async ()
     expect(manager.save).not.toHaveBeenCalled();
   });
 
-   it('moves a subtask out of Done when its parent is not Done', async () => {
+  it('moves a subtask out of Done when its parent is not Done', async () => {
     manager.findOne
       .mockResolvedValueOnce(aTask({ parentTaskId: '5' }))
       .mockResolvedValueOnce({ status: 'P' });
@@ -441,6 +441,22 @@ it('does not check subtasks when the status is changed to In Progress', async ()
     expect(savedSkills).toEqual([
       { taskId: '2', skillId: '2', createdBy: 'System', modifiedBy: 'System' },
     ]);
+  });
+
+  it('saves nothing when the skills could not be identified', async () => {
+    skillIdentificationService.identifyForTaskTree.mockRejectedValue(
+      new ServiceUnavailableException(
+        'Failed to save the task, please try again',
+      ),
+    );
+
+    await expect(
+      tasksService.create(
+        { taskTitle: 'Parent', subtasks: [{ taskTitle: 'Child' }] },
+        'Bob',
+      ),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(tasksRepository.manager.transaction).not.toHaveBeenCalled();
   });
 
   it('keeps the skills the user chose, recorded as added by the user', async () => {

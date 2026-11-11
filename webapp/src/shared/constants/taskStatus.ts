@@ -1,3 +1,4 @@
+// Set of Task Status
 export const TaskStatus = {
   TODO: 'T',
   IN_PROGRESS: 'P',
