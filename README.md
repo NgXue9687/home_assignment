@@ -29,7 +29,14 @@ A full-stack application for creating tasks (with nested subtasks), identifying 
 
 ## Running the application
 
-> **Docker (Part 6):** a single `docker compose up` for the whole application is being added. Until then, run the three parts as below.
+### Quick start (Docker)
+
+```bash
+cp webapp/.env.example webapp/.env    # set DB_PASSWORD and LLM_API_KEY
+docker compose up --build
+```
+
+Open http://localhost:4000.
 
 ### Prerequisites
 
