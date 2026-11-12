@@ -18,8 +18,8 @@ You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 **1. Get the code**
 
 ```bash
-git clone https://github.com/NgXue9687/HTX.git
-cd HTX
+git clone https://github.com/NgXue9687/home_assignment.git
+cd home_assignment
 ```
 
 **2. Add the API key.** Open `webapp/.env` and set `LLM_API_KEY` to the key from our email:
