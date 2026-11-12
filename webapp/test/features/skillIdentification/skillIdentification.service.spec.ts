@@ -139,7 +139,9 @@ describe('SkillIdentificationService', () => {
 
     await expect(
       (await createService()).identifyForTaskTree({ taskTitle: 'Task' }),
-    ).rejects.toThrow('Failed to save the task, please try again');
+    ).rejects.toThrow(
+      'Failed to save the task. Please try again later, or select the skills yourself.',
+    );
   });
 
   it('refuses to save when there are no active skills', async () => {

@@ -9,6 +9,8 @@ export type TaskResponseDto = {
   parentUuid: string | null;
   skills: { uuid: string; skillName: string }[];
   assignedDeveloper: { uuid: string; name: string } | null;
+  createdDate: Date; // sent as an ISO date string
+  modifiedDate: Date;
 };
 
 export function toTaskResponse(task: TaskEntity): TaskResponseDto {
@@ -27,5 +29,7 @@ export function toTaskResponse(task: TaskEntity): TaskResponseDto {
     assignedDeveloper: assignment
       ? { uuid: assignment.developer.uuid, name: assignment.developer.name }
       : null,
+    createdDate: task.createdDate,
+    modifiedDate: task.modifiedDate,
   };
 }

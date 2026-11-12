@@ -29,6 +29,7 @@ services:
     environment:
       DB_HOST: postgresql            # overrides "localhost" from .env: inside Docker the DB is this service
       DB_PORT: 5432
+      TZ: Asia/Singapore             # same as the database, so its local timestamps are read correctly
     depends_on:
       postgresql:
         condition: service_healthy   # wait until the database is ready

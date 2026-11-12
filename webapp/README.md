@@ -63,7 +63,7 @@ test/                          # mirrors src/
 
 ## Skill identification using an LLM (Part 5)
 
-When a task or subtask is created **without** `skillUuids`, the backend asks an LLM which skills it needs, based on its title, and saves them. Nothing has to be triggered from the frontend.
+When a task or subtask is created **without** `skillUuids`, the backend asks an LLM which skills it needs, based on its title (and its description, when given), and saves them. Nothing has to be triggered from the frontend.
 
 ### Setup
 
@@ -117,7 +117,7 @@ POST /tasks ─► TasksService.create
 - **Skills come from the database, not the code.** The prompt lists the active skills with their descriptions, and the response schema limits the answer to those names (`enum`). Adding a skill row makes it available to the LLM with no code change.
 - **The LLM's answer is never trusted as-is.** Names are matched against the skills table (ignoring case), and anything unknown, malformed or for a task that wasn't asked about is dropped. The schema and this check also limit what a prompt-injection attempt in a task title could achieve: at most, a wrong choice among real skills.
 - **One LLM call per request.** A task and all its subtasks are classified in a single call, which keeps latency low and stays inside free-tier rate limits.
-- **No task is saved without skills (fail closed).** If the provider is down, slow (timeout), rate limited after one retry, or leaves any task or subtask without a skill, the whole request is rejected with `503` and the message *"Failed to save the task, please try again"*. Nothing is saved, and the real reason is logged. A task without skills could be assigned to any developer, which would get around the rule that a task only goes to a developer with its skills. The user can retry, or choose the skills themselves to skip the LLM.
+- **Failed to save the task. Please try again later, or select the skills yourself.** If the provider is down, slow (timeout), rate limited after one retry, or leaves any task or subtask without a skill, the whole request is rejected with `503` and the message *"Failed to save the task, please try again"*. Nothing is saved, and the real reason is logged. A task without skills could be assigned to any developer, which would get around the rule that a task only goes to a developer with its skills. The user can retry, or choose the skills themselves to skip the LLM.
 - **The LLM is called before the database transaction**, so no transaction is held open while waiting on a network call.
 - **Audit trail.** Skills the LLM identified are saved with `createdby = 'System'`, so they can be told apart from skills a user chose.
 - **Deterministic.** `temperature: 0`, plus the three examples from the requirements as few-shot examples in the prompt.

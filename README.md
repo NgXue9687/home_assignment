@@ -163,7 +163,7 @@ sequenceDiagram
     LLM-->>SI: { tasks: [{ index, skills }] }
     SI->>SI: keep only skills that exist; every task must get one
     alt identification failed
-        SI-->>UI: 503 "Failed to save the task, please try again"
+        SI-->>UI: 503 "Failed to save the task. Please try again later, or select the skills yourself."
     else identified
         API->>DB: transaction: insert tasks, subtasks, skill links
         API-->>UI: 201 created task
@@ -277,7 +277,9 @@ Only `taskTitle` (1–255 characters) is required. Leave out `skillUuids` to hav
   "version": 1,
   "parentUuid": null,
   "skills": [{ "uuid": "…", "skillName": "Frontend" }],
-  "assignedDeveloper": { "uuid": "…", "name": "Carol" }
+  "assignedDeveloper": { "uuid": "…", "name": "Carol" },
+  "createdDate": "2026-11-12T07:30:00.000Z",
+  "modifiedDate": "2026-11-12T07:45:00.000Z"
 }
 ```
 
@@ -325,11 +327,11 @@ A browser-based API tester is served by the backend in development at http://loc
 
 ## Skill identification with an LLM
 
-When a task or subtask is created without skills, the backend asks the LLM which skills it needs, based on its title. The user never triggers this.
+When a task or subtask is created without skills, the backend asks the LLM which skills it needs, based on its title (and its description, when given). The user never triggers this.
 
 - **One request per create**, covering the task and all its subtasks.
 - **The skill list comes from the database**, with descriptions. A JSON response schema limits the answer to those skill names, and the answer is checked against the table again before saving.
-- **Fail closed.** If the LLM is unavailable, slow, or leaves any task without a skill, nothing is saved and the user sees *"Failed to save the task, please try again"*. A task without skills could otherwise be assigned to any developer.
+- **Fail closed.** If the LLM is unavailable, slow, or leaves any task without a skill, nothing is saved and the user sees *"Failed to save the task. Please try again later, or select the skills yourself."*. A task without skills could otherwise be assigned to any developer.
 - **Audit trail.** LLM-chosen skills are saved with `createdby = 'System'`.
 - **Provider-independent.** Gemini, OpenAI, Groq, OpenRouter, Mistral or a local Ollama is a configuration change.
 

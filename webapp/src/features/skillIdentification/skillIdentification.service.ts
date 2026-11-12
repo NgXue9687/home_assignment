@@ -70,6 +70,8 @@ export class SkillIdentificationService {
       responseSchema: buildResponseSchema(skills),
     });
 
+    this.logger.log(`LLM answer: ${JSON.stringify(answer)}`);
+
     const identified = new Map<CreateTaskDto, SkillEntity[]>();
     for (const { index, skillNames } of readAnswer(answer)) {
       const matchedTask = tasks[index];

@@ -19,4 +19,6 @@ export interface Task {
   parentUuid: string | null; // set when this task is a subtask
   skills: SkillSummary[];
   assignedDeveloper: { uuid: string; name: string } | null;
+  createdDate: string; // ISO date string, e.g. "2026-11-12T07:30:00.000Z"
+  modifiedDate: string;
 }

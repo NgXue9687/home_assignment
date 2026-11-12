@@ -4,8 +4,8 @@ SET ROLE db_admin;
 
 INSERT INTO hrms.skills(uuid,createdby,modifiedby,skillname,skilldescription,status)
 VALUES
-    (gen_random_uuid(),'System','System','Frontend','Builds and maintains the user interface of web applications, turning designs into responsive, accessible screens and integrating them with backend APIs.','A'),
-    (gen_random_uuid(),'System','System','Backend','Develops server-side logic, APIs and databases, ensuring data integrity, security and performance of the application.','A')
+    (gen_random_uuid(),'System','System','Frontend','Builds what users see and use: pages, screens, forms, buttons, links, menus, layout, styling, responsiveness and accessibility, and connects them to backend APIs.','A'),
+    (gen_random_uuid(),'System','System','Backend','Builds what runs on the server: APIs and endpoints, databases and queries, business rules, authentication and permissions, security, integrations, emails, logging and performance.','A')
 ;
 
 

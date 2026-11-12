@@ -74,6 +74,14 @@ interface CellContext {
   onAssigneeChange: (task: Task, developer: Developer | null) => void;
 }
 
+// e.g. "12 Nov 2026, 3:45 pm" in the viewer's own time zone and format.
+function formatDateTime(isoDate: string): string {
+  return new Date(isoDate).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 // What each column shows for one task.
 function renderCell(task: Task, columnId: TaskColumnId, context: CellContext) {
   switch (columnId) {
@@ -107,6 +115,12 @@ function renderCell(task: Task, columnId: TaskColumnId, context: CellContext) {
           disabled={context.saving}
           onChange={(status) => context.onStatusChange(task, status)}
         />
+      );
+    case "createdDate":
+      return (
+        <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
+          {formatDateTime(task.createdDate)}
+        </Typography>
       );
     case "assignedDeveloper":
       return (

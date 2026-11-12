@@ -446,7 +446,7 @@ describe('TasksService subtasks', () => {
   it('saves nothing when the skills could not be identified', async () => {
     skillIdentificationService.identifyForTaskTree.mockRejectedValue(
       new ServiceUnavailableException(
-        'Failed to save the task, please try again',
+        'Failed to save the task. Please try again later, or select the skills yourself.',
       ),
     );
 

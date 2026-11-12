@@ -2,7 +2,12 @@ import type { Task } from "./task.model";
 
 export type SortOrder = "asc" | "desc";
 
-export type TaskColumnId = "taskTitle" | "skills" | "status" | "assignedDeveloper";
+export type TaskColumnId =
+  | "taskTitle"
+  | "skills"
+  | "status"
+  | "assignedDeveloper"
+  | "createdDate";
 
 // One column of the task list table.
 export interface TaskColumn {

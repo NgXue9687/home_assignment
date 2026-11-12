@@ -63,11 +63,16 @@ export const TASK_COLUMNS: TaskColumn[] = [
     label: "Assignee",
     sortValue: (task) => task.assignedDeveloper?.name.toLowerCase() ?? null,
   },
+  {
+    id: "createdDate",
+    label: "Created",
+    sortValue: (task) => Date.parse(task.createdDate),
+  },
 ];
 
 export const DEFAULT_TASK_SORT: { orderBy: TaskColumnId; order: SortOrder } = {
-  orderBy: "taskTitle",
-  order: "asc",
+  orderBy: "createdDate", // newest first
+  order: "desc",
 };
 
 // ---- Limits (the same ones the backend checks) ----------------------------
