@@ -569,7 +569,8 @@
             body: {
               taskTitle: '[smoke] parent',
               skillUuids: [ctx.skill.uuid],
-              subtasks: [{ taskTitle: '[smoke] child' }],
+              // The child gets the skill too, so this check doesn't depend on the LLM.
+              subtasks: [{ taskTitle: '[smoke] child', skillUuids: [ctx.skill.uuid] }],
             },
           });
           ctx.parent = result.status === 201 ? result.data : null;
