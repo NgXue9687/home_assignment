@@ -8,7 +8,10 @@ import { In, Repository } from 'typeorm';
 import { SysConfigEntity } from '../../models/entity/sysconfig.entity.js';
 import { SysConfigKey } from '../../shared/constants/sysConfig.js';
 import { SysMessage } from '../../shared/constants/sysMessages.js';
-import { SysConfigResponseDto, toSysConfigResponse } from '../../models/dto/response/sysConfigResponseDto.js';
+import {
+  SysConfigResponseDto,
+  toSysConfigResponse,
+} from '../../models/dto/response/sysConfigResponseDto.js';
 
 @Injectable()
 export class SysConfigService {
@@ -21,12 +24,13 @@ export class SysConfigService {
 
   // Only one system configuration, which to limit the depth of the nesting of subtasks.
 
-  async getSysConfigValues(sysConfigList: SysConfigKey[]): Promise<SysConfigResponseDto[]>{
+  async getSysConfigValues(
+    sysConfigList: SysConfigKey[],
+  ): Promise<SysConfigResponseDto[]> {
     const sysconfigs = await this.sysConfigRepository.find({
-      where: {sysConfigName: In(sysConfigList)},
-      order: {sysConfigName: 'ASC'}
-    }
-    )
+      where: { sysConfigName: In(sysConfigList) },
+      order: { sysConfigName: 'ASC' },
+    });
 
     return sysconfigs.map(toSysConfigResponse);
   }

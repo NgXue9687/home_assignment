@@ -1,7 +1,7 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { sysConfigApi } from "../shared/api";
-import { MAX_SUBTASK_DEPTH } from "../shared/constants";
 import type { RootState } from "./store";
+import { MAX_SUBTASK_DEPTH } from "../shared/constants";
 
 interface SysConfigState {
   values: Record<string, string>;            // { MAX_SUBTASK_LIST_SIZE: "3" }

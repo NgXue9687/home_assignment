@@ -81,4 +81,5 @@ export const TASK_DESCRIPTION_MAX_LENGTH = 5000;
 
 // Levels of subtasks allowed below the main task. Default only: the real value
 // comes from the MAX_SUBTASK_LIST_SIZE sysconfig.
+// used until the sysconfig value has loaded, or if loading fails
 export const MAX_SUBTASK_DEPTH = 3;

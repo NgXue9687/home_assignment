@@ -1,6 +1,5 @@
 import { TASK_STATUS, type TaskStatusCode } from "../models";
 import {
-  MAX_SUBTASK_DEPTH,
   TASK_DESCRIPTION_MAX_LENGTH,
   TASK_TITLE_MAX_LENGTH,
 } from "./constants";
@@ -75,7 +74,7 @@ export function countDrafts(draft: TaskDraft): number {
 // ---- Checking before saving (the same rules the backend enforces) ----------
 
 // Errors per card key. An empty map means the tree can be saved.
-export function validateDraftTree(root: TaskDraft): Map<string, DraftErrors> {
+export function validateDraftTree(root: TaskDraft, maxSubTaskDepth: number): Map<string, DraftErrors> {
   const errors = new Map<string, DraftErrors>();
   const visit = (draft: TaskDraft, depth: number) => {
     const found: DraftErrors = {};
@@ -90,7 +89,7 @@ export function validateDraftTree(root: TaskDraft): Map<string, DraftErrors> {
       draft.subtasks.some((subtask) => subtask.status !== TASK_STATUS.DONE)
     )
       found.status = "Can only be Done when all its subtasks are Done";
-    if (depth > MAX_SUBTASK_DEPTH) found.taskTitle = "Subtasks are nested too deeply";
+    if (depth > maxSubTaskDepth) found.taskTitle = "Subtasks are nested too deeply";
     if (Object.keys(found).length > 0) errors.set(draft.key, found);
     draft.subtasks.forEach((subtask) => visit(subtask, depth + 1));
   };

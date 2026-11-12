@@ -7,7 +7,6 @@ NestJS (TypeScript) API for tasks, subtasks, developers and skills, with LLM-bas
 Requires Node.js 22+ and the PostgreSQL database from the repository's `docker-compose.yml`.
 
 ```bash
-cp .env.example .env    # set DB_PASSWORD and LLM_API_KEY
 npm install
 npm run start:dev       # http://localhost:3000
 ```

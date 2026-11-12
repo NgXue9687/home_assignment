@@ -12,7 +12,6 @@ import {
 } from "@mui/material";
 import type { Skill, TaskStatusCode } from "../models";
 import {
-  MAX_SUBTASK_DEPTH,
   TASK_DESCRIPTION_MAX_LENGTH,
   TASK_STATUS_LABELS,
   TASK_TITLE_MAX_LENGTH,
@@ -72,7 +71,7 @@ export function TaskFormCard({
           </Typography>
           <Stack direction="row" spacing={1}>
             <Tooltip
-              title={canAddSubtask ? "" : `Subtasks can be nested at most ${MAX_SUBTASK_DEPTH} levels deep`}
+              title={canAddSubtask ? "" : `Subtasks can be nested at most ${maxDepth} levels deep`}
             >
               {/* span: a tooltip needs an element that still gets mouse events when the button is disabled */}
               <span>

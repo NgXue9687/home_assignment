@@ -32,11 +32,9 @@ A full-stack application for creating tasks (with nested subtasks), identifying 
 ### Quick start (Docker)
 
 ```bash
-cp webapp/.env.example webapp/.env    # set DB_PASSWORD and LLM_API_KEY
-docker compose up --build
+cp webapp/.env.example webapp/.env
 ```
-
-Open http://localhost:4000.
+Open `webapp/.env` and set `LLM_API_KEY` to the key from our email. Then run `docker compose up --build` and open http://localhost:4000.
 
 ### Prerequisites
 
@@ -61,9 +59,10 @@ On first start, the scripts in `containers/postgresql/docker-entrypoint-initdb.d
 
 ### 2. Backend (port 3000)
 
+Create webapp/.env.local with LLM_API_KEY=your-key (the rest of the settings are in the committed webapp/.env).
+
 ```bash
 cd webapp
-cp .env.example .env      # then set DB_PASSWORD and LLM_API_KEY
 npm install
 npm run start:dev
 ```

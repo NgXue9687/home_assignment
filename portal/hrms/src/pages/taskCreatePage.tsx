@@ -23,8 +23,11 @@ import {
   validateDraftTree,
   type TaskDraft,
 } from "../shared/taskDraft";
+import { useAppSelector } from "../store/hooks";
+import { selectMaxSubtaskDepth } from "../store/sysConfigslice";
 
 export function TaskCreatePage() {
+  const maxDepth = useAppSelector(selectMaxSubtaskDepth);
   const navigate = useNavigate();
   const notify = useNotify();
   const [draft, setDraft] = useState<TaskDraft>(newTaskDraft);
@@ -49,7 +52,7 @@ export function TaskCreatePage() {
     };
   }, []);
 
-  const errors = useMemo(() => validateDraftTree(draft), [draft]);
+  const errors = useMemo(() => validateDraftTree(draft, maxDepth), [draft, maxDepth]);
   const visibleErrors = showErrors ? errors : new Map();
 
   const handleSave = async (event: FormEvent) => {

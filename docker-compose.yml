@@ -22,7 +22,10 @@ services:
   backend:
     container_name: htx-backend
     build: ./webapp
-    env_file: ./webapp/.env          # LLM key and DB password come from here
+    env_file:                     # LLM key and DB password come from here
+      - path: ./webapp/.env 
+      - path: ./webapp/.env.local
+        required: false 
     environment:
       DB_HOST: postgresql            # overrides "localhost" from .env: inside Docker the DB is this service
       DB_PORT: 5432

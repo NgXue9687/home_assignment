@@ -100,13 +100,11 @@ describe('toGeminiSchema', () => {
 
 describe('GeminiClient network errors', () => {
   it('says how long it waited when the request times out', async () => {
-    const fetchFn = vi
-      .fn()
-      .mockRejectedValue(
-        Object.assign(new Error('The operation was aborted due to timeout'), {
-          name: 'TimeoutError',
-        }),
-      );
+    const fetchFn = vi.fn().mockRejectedValue(
+      Object.assign(new Error('The operation was aborted due to timeout'), {
+        name: 'TimeoutError',
+      }),
+    );
     const client = new GeminiClient({
       apiKey: 'k',
       model: 'm',
@@ -120,13 +118,11 @@ describe('GeminiClient network errors', () => {
   });
 
   it('says why the provider could not be reached', async () => {
-    const fetchFn = vi
-      .fn()
-      .mockRejectedValue(
-        Object.assign(new TypeError('fetch failed'), {
-          cause: { code: 'ENOTFOUND' },
-        }),
-      );
+    const fetchFn = vi.fn().mockRejectedValue(
+      Object.assign(new TypeError('fetch failed'), {
+        cause: { code: 'ENOTFOUND' },
+      }),
+    );
     const client = new GeminiClient({
       apiKey: 'k',
       model: 'm',
