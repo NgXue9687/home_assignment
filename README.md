@@ -31,10 +31,8 @@ A full-stack application for creating tasks (with nested subtasks), identifying 
 
 ### Quick start (Docker)
 
-```bash
-cp webapp/.env.example webapp/.env
-```
-Open `webapp/.env` and set `LLM_API_KEY` to the key from our email. Then run `docker compose up --build` and open http://localhost:4000.
+Open webapp/.env and set LLM_API_KEY to the key from our email.
+Then run docker compose up --build and open http://localhost:4000.
 
 ### Prerequisites
 
