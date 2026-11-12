@@ -11,28 +11,55 @@ A full-stack application for creating tasks (with nested subtasks), identifying 
 
 ---
 
-## Contents
+## Quick start
 
-1. [Running the application](#running-the-application)
-2. [Configuration](#configuration)
-3. [System design](#system-design)
-4. [Data model](#data-model)
-5. [API](#api)
-6. [Business rules](#business-rules)
-7. [Skill identification with an LLM](#skill-identification-with-an-llm)
-8. [Libraries and why they were chosen](#libraries-and-why-they-were-chosen)
-9. [Assumptions](#assumptions)
-10. [Testing](#testing)
-11. [Repository layout](#repository-layout)
+You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+**1. Get the code**
+
+```bash
+git clone https://github.com/NgXue9687/HTX.git
+cd HTX
+```
+
+**2. Add the API key.** Open `webapp/.env` and set `LLM_API_KEY` to the key from our email:
+
+```
+LLM_API_KEY=your-key-here
+```
+
+**3. Start everything** (the first build takes a few minutes)
+
+```bash
+docker compose up --build
+```
+
+**4. Open http://localhost:4000**
+
+The database starts with the seeded developers (Alice, Bob, Carol, Dave) and skills (Frontend, Backend). More Docker commands, such as resetting the database, are in [`docs/dockerCommands.md`](docs/dockerCommands.md).
 
 ---
 
-## Running the application
+## Contents
 
-### Quick start (Docker)
+1. [Quick start](#quick-start)
+2. [Running without Docker (development)](#running-without-docker-development)
+3. [Configuration](#configuration)
+4. [System design](#system-design)
+5. [Data model](#data-model)
+6. [API](#api)
+7. [Business rules](#business-rules)
+8. [Skill identification with an LLM](#skill-identification-with-an-llm)
+9. [Libraries and why they were chosen](#libraries-and-why-they-were-chosen)
+10. [Assumptions](#assumptions)
+11. [Testing](#testing)
+12. [Repository layout](#repository-layout)
 
-Open webapp/.env and set LLM_API_KEY to the key from our email.
-Then run docker compose up --build and open http://localhost:4000.
+---
+
+## Running without Docker (development)
+
+For working on the code, with hot reload. To just run the application, use the [Quick start](#quick-start).
 
 ### Prerequisites
 
